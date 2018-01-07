@@ -6,16 +6,15 @@ import (
 	"log"
 	"log/syslog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/hashicorp/logutils"
 	"github.com/jessevdk/go-flags"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
-	"github.com/umputun/docker-logger/app/logger/rotator"
 )
 
 var opts struct {
@@ -23,8 +22,9 @@ var opts struct {
 	SyslogHost    string        `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
 	EnableFiles   bool          `long:"files" env:"LOG_FILES" description:"enable logging to files"`
 	EnableSyslog  bool          `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
-	MaxFileSize   int64         `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
+	MaxFileSize   int           `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
 	MaxFilesCount int           `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to keep"`
+	MaxFilesAge   int           `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
 	Excludes      []string      `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	FlushRecs     int           `long:"flush-recs" env:"FLUSH_RECS" default:"100" description:"flush every N records"`
 	FlushInterval time.Duration `long:"flush-time" env:"FLUSH_TIME" default:"1s" description:"flush inactivity time"`
@@ -105,26 +105,27 @@ func MakeLogWriters(containerName string, group string) (logWriter, errWriter io
 		}
 
 		logName := fmt.Sprintf("%s/%s.log", logDir, containerName)
-
-		maxSize := opts.MaxFileSize * 1024 * 1024
-		logFileWriter, err := rotator.New(logName, rotator.MaxSize(maxSize), rotator.MaxFiles(opts.MaxFilesCount),
-			rotator.Buffer(opts.FlushRecs), rotator.Interval(opts.FlushInterval))
-		if err != nil {
-			log.Printf("[WARN] can't make logger for %s", logName)
+		logFileWriter := lumberjack.Logger{
+			Filename:   logName,
+			MaxSize:    opts.MaxFileSize, // megabytes
+			MaxBackups: opts.MaxFilesCount,
+			MaxAge:     opts.MaxFilesAge, //days
+			Compress:   true,
 		}
 
-		errFname := strings.Replace(logName, ".log", ".err", 1)
-
-		errFileWriter, err := rotator.New(errFname, rotator.MaxSize(maxSize), rotator.MaxFiles(opts.MaxFilesCount),
-			rotator.Buffer(opts.FlushRecs), rotator.Interval(opts.FlushInterval))
-		if err != nil {
-			log.Printf("[WARN] can't make logger for %s", errFname)
+		errFname := fmt.Sprintf("%s/%s.err", logDir, containerName)
+		errFileWriter := lumberjack.Logger{
+			Filename:   errFname,
+			MaxSize:    opts.MaxFileSize, // megabytes
+			MaxBackups: opts.MaxFilesCount,
+			MaxAge:     opts.MaxFilesAge, //days
+			Compress:   true,
 		}
 
-		logWriters = append(logWriters, logFileWriter)
-		errWriters = append(errWriters, errFileWriter)
-		log.Printf("[INFO] loggers created for %s and %s, max.size=%d, max.files=%d, flush.recs=%d, flush.interval=%v",
-			logName, errFname, maxSize, opts.MaxFilesCount, opts.FlushRecs, opts.FlushInterval)
+		logWriters = append(logWriters, &logFileWriter)
+		errWriters = append(errWriters, &errFileWriter)
+		log.Printf("[INFO] loggers created for %s and %s, max.size=%dM, max.files=%d, max.days=%d",
+			logName, errFname, opts.MaxFileSize, opts.MaxFilesCount, opts.MaxFilesAge)
 	}
 
 	if opts.EnableSyslog {

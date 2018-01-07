@@ -31,13 +31,6 @@
 			"revisionTime": "2016-12-10T16:54:02Z"
 		},
 		{
-			"checksumSHA1": "OFu4xJEIjiI8Suu+j/gabfp+y6Q=",
-			"origin": "github.com/stretchr/testify/vendor/github.com/davecgh/go-spew/spew",
-			"path": "github.com/davecgh/go-spew/spew",
-			"revision": "05e8a0eda380579888eb53c394909df027f06991",
-			"revisionTime": "2017-07-13T16:51:06Z"
-		},
-		{
 			"checksumSHA1": "huekwm/eD23ezYAuuWpqSL33hw4=",
 			"path": "github.com/docker/docker/api/types",
 			"revision": "b1322e3de9f2b2962e9a9d9f9c660b5c5859117b",
@@ -252,19 +245,6 @@
 			"revisionTime": "2016-12-10T16:54:02Z"
 		},
 		{
-			"checksumSHA1": "zKKp5SZ3d3ycKe4EKMNT0BqAWBw=",
-			"origin": "github.com/stretchr/testify/vendor/github.com/pmezard/go-difflib/difflib",
-			"path": "github.com/pmezard/go-difflib/difflib",
-			"revision": "05e8a0eda380579888eb53c394909df027f06991",
-			"revisionTime": "2017-07-13T16:51:06Z"
-		},
-		{
-			"checksumSHA1": "J+ppEq6nYMKxhB9+c+MD1x9UwSc=",
-			"path": "github.com/stretchr/testify/assert",
-			"revision": "05e8a0eda380579888eb53c394909df027f06991",
-			"revisionTime": "2017-07-13T16:51:06Z"
-		},
-		{
 			"checksumSHA1": "Y+HGqEkYM15ir+J93MEaHdyFy0c=",
 			"path": "golang.org/x/net/context",
 			"revision": "d1e1b351919c6738fdeb9893d5c998b161464f0c",
@@ -289,6 +269,12 @@
 			"path": "golang.org/x/sys/windows",
 			"revision": "b1322e3de9f2b2962e9a9d9f9c660b5c5859117b",
 			"revisionTime": "2016-12-10T16:54:02Z"
+		},
+		{
+			"checksumSHA1": "TM3Neoy1xRAKyZYMGzKc41sDFW4=",
+			"path": "gopkg.in/natefinch/lumberjack.v2",
+			"revision": "a96e63847dc3c67d17befa69c303767e2f84e54f",
+			"revisionTime": "2017-05-31T16:03:50Z"
 		}
 	],
 	"rootPath": "github.com/umputun/docker-logger"
