@@ -1,0 +1,29 @@
+version: '2'
+
+services:
+    remark:
+        image: umputun/logger
+        container_name: "logger"
+        hostname: "logger"
+        restart: always
+
+        logging:
+          driver: json-file
+          options:
+              max-size: "10m"
+              max-file: "5"
+
+        environment:
+            - MHOST
+            - LOG_FILES=true
+            - LOG_SYSLOG=false
+            - EXCLUDE=monit,logger
+            - MAX_SIZE=50
+            - FLUSH_RECS=1000
+            - FLUSH_TIME=1s
+            - DEBUG=true
+
+        volumes:
+            - ./logs:/srv/logs
+            - /var/run/docker.sock:/var/run/docker.sock
+       
