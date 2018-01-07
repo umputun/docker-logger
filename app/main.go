@@ -76,6 +76,7 @@ func main() {
 		} else {
 
 			if ls, ok := containerLogs[event.ContainerID]; ok {
+				ls.CancelFn()
 				log.Printf("[DEBUG] close loggers for %+v", event)
 				if e := ls.LogWriter.Close(); e != nil {
 					log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
@@ -83,7 +84,6 @@ func main() {
 				if e := ls.ErrWriter.Close(); e != nil {
 					log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
 				}
-				ls.CancelFn()
 				delete(containerLogs, event.ContainerID)
 			}
 		}
