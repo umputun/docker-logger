@@ -22,6 +22,7 @@ services:
             - FLUSH_RECS=1000
             - FLUSH_TIME=1s
             - DEBUG=true
+            - TIME_ZONE=America/Chicago
 
         volumes:
             - ./logs:/srv/logs
