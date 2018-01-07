@@ -36,7 +36,7 @@ var opts struct {
 var revision = "unknown"
 
 func main() {
-	log.Printf("docker-logger %s", revision)
+	fmt.Printf("docker-logger %s\n", revision)
 	if _, err := flags.Parse(&opts); err != nil {
 		os.Exit(1)
 	}
@@ -75,17 +75,21 @@ func main() {
 			ls.Go()
 		} else {
 
-			if ls, ok := containerLogs[event.ContainerID]; ok {
-				ls.CancelFn()
-				log.Printf("[DEBUG] close loggers for %+v", event)
-				if e := ls.LogWriter.Close(); e != nil {
-					log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
-				}
-				if e := ls.ErrWriter.Close(); e != nil {
-					log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
-				}
-				delete(containerLogs, event.ContainerID)
+			ls, ok := containerLogs[event.ContainerID]
+			if !ok {
+				log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
+				continue
 			}
+
+			log.Printf("[DEBUG] close loggers for %+v", event)
+			ls.CancelFn()
+			if e := ls.LogWriter.Close(); e != nil {
+				log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
+			}
+			if e := ls.ErrWriter.Close(); e != nil {
+				log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
+			}
+			delete(containerLogs, event.ContainerID)
 		}
 	}
 }
