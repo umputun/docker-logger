@@ -245,8 +245,6 @@ func (aw *activeFileWriter) compress(srcFile string, destGz string) error {
 	if err = file.Close(); err != nil {
 		return err
 	}
-	if err = gw.Close(); err != nil {
-		return err
-	}
-	return nil
+
+	return gw.Close()
 }
