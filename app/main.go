@@ -58,7 +58,7 @@ func main() {
 	for event := range events.Channel() {
 
 		if event.Status {
-			// new container detected
+			// new/started container detected
 			logWriter, errWriter := MakeLogWriters(event.ContainerName, event.Group)
 			ctx, cancel := context.WithCancel(context.Background())
 			ls := logger.LogStreamer{
@@ -75,7 +75,7 @@ func main() {
 			continue
 		}
 
-		// container removed/stopped
+		// removed/stopped container detected
 		ls, ok := containerLogs[event.ContainerID]
 		if !ok {
 			log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
@@ -148,7 +148,6 @@ func MakeLogWriters(containerName string, group string) (logWriter, errWriter io
 			log.Printf("[WARN] can't connect to syslog, %v", err)
 		}
 	}
-
 	return logger.NewMultiWriterIgnoreErrors(logWriters...), logger.NewMultiWriterIgnoreErrors(errWriters...)
 }
 

@@ -4,7 +4,7 @@ docker-logger is a small application collecting logs from other docker container
 
 ## Install
 
-Copy provided [`docker-compose.yml`](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run is with `docker-compose up -d`
+Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run it with `docker-compose up -d`
 
 ## Customization
 
@@ -13,7 +13,7 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 | Command line    | Environment   | Default                     | Description                               |
 | --------------- | ------------- | --------------------------- | ----------------------------------------- |
 | `--docker`      | `DOCKER_HOST` | unix:///var/run/docker.sock | docker host                               |
-| `--syslog-host` | `SYSLOG_HOST` | 127.0.0.1:514               | syslog remote host                        |
+| `--syslog-host` | `SYSLOG_HOST` | 127.0.0.1:514               | syslog remote host (udp4)                 |
 | `--files`       | `LOG_FILES`   | No                          | enable logging to files                   |
 | `--syslog`      | `LOG_SYSLOG`  | No                          | enable logging to syslog                  |
 | `--max-size`    | `MAX_SIZE`    | 10                          | size of log triggering rotation (MB)      |
@@ -24,3 +24,9 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 
 - at least one of destinations (`files` or `syslog`) should be defined
 - location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)
+
+## Build from the source
+
+- clone this repo - `git clone https://github.com/umputun/docker-logger.git`
+- build the logger - `cd docker-logger && docker build -t umputun/logger .`
+- try it - `docker run -it --rm -v /var/run/docker.sock:/var/run/docker.sock /srv/docker-logger --files`
