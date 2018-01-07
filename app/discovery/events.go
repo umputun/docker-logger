@@ -16,11 +16,11 @@ type EventNotif struct {
 	eventsCh     chan Event
 }
 
-// Event is simplified docker.APIEvents for containers only exposed to caller
+// Event is simplified docker.APIEvents for containers only, exposed to caller
 type Event struct {
 	ContainerID   string
 	ContainerName string
-	Group         string
+	Group         string // group is the "path" part of the image tag, i.e. for umputun/system/logger:latest it will be "system"
 	TS            time.Time
 	Status        bool
 }
@@ -91,7 +91,7 @@ func (e *EventNotif) activate(client *docker.Client) {
 	log.Fatal("[ERROR] event listener failed")
 }
 
-// emitRunningContainers gets all current containers and publishes them as "Status=true" (started) events
+// emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events
 func (e *EventNotif) emitRunningContainers() error {
 
 	containers, err := e.dockerClient.ListContainers(docker.ListContainersOptions{All: false})

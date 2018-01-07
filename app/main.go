@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -12,8 +13,6 @@ import (
 	"github.com/hashicorp/logutils"
 	"github.com/jessevdk/go-flags"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
-
-	"context"
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
@@ -59,7 +58,7 @@ func main() {
 	for event := range events.Channel() {
 
 		if event.Status {
-
+			// new container detected
 			logWriter, errWriter := MakeLogWriters(event.ContainerName, event.Group)
 			ctx, cancel := context.WithCancel(context.Background())
 			ls := logger.LogStreamer{
@@ -73,24 +72,25 @@ func main() {
 			}
 			containerLogs[event.ContainerID] = ls
 			ls.Go()
-		} else {
-
-			ls, ok := containerLogs[event.ContainerID]
-			if !ok {
-				log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
-				continue
-			}
-
-			log.Printf("[DEBUG] close loggers for %+v", event)
-			ls.CancelFn()
-			if e := ls.LogWriter.Close(); e != nil {
-				log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
-			}
-			if e := ls.ErrWriter.Close(); e != nil {
-				log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
-			}
-			delete(containerLogs, event.ContainerID)
+			continue
 		}
+
+		// container removed/stopped
+		ls, ok := containerLogs[event.ContainerID]
+		if !ok {
+			log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
+			continue
+		}
+
+		log.Printf("[DEBUG] close loggers for %+v", event)
+		ls.CancelFn()
+		if e := ls.LogWriter.Close(); e != nil {
+			log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
+		}
+		if e := ls.ErrWriter.Close(); e != nil {
+			log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
+		}
+		delete(containerLogs, event.ContainerID)
 	}
 }
 

@@ -1,11 +1,10 @@
 package logger
 
 import (
+	"context"
 	"io"
 	"log"
 	"time"
-
-	"context"
 
 	"github.com/fsouza/go-dockerclient"
 )
