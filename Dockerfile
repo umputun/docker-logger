@@ -17,11 +17,11 @@ RUN go build -o docker-logger -ldflags "-X main.revision=$(git rev-parse --abbre
 FROM umputun/baseimage:micro-latest
 
 COPY --from=build /go/src/github.com/umputun/docker-logger/docker-logger /srv/
-RUN chown -R umputun:umputun /srv
+COPY init.sh /srv/init.sh
+RUN chmod +x /srv/init.sh
 
-USER umputun
+USER root
 WORKDIR /srv
 
 VOLUME ["/srv/logs"]
 CMD ["/srv/docker-logger"]
-ENTRYPOINT ["/init.sh"]
