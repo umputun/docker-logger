@@ -21,3 +21,6 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 | exclude      | EXCLUDE     |                             | excluded container names, comma separated |
 | flush-recs   | FLUSH_RECS  | 100                         | flush every N records to disk             |
 | flush-time   | FLUSH_TIME  | 1s                          | flush on inactivity interval              |
+
+- at least one of destinations (`files` or `syslog`) should be defined
+- location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)
