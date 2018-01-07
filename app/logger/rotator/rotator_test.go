@@ -114,7 +114,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestSelf(t *testing.T) {
-	data, err := ioutil.ReadFile("writer_test.go")
+	data, err := ioutil.ReadFile("rotator_test.go")
 	assert.Nil(t, err)
 
 	location := "/tmp/logs-test.rotated"

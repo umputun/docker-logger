@@ -8,6 +8,9 @@ pipeline:
     image: golang:1.9-alpine
     commands:
       - cd app
+      - export CGO_ENABLED=0
+      - export GOOS=linux
+      - export GOARCH=amd64
       - go build -v ./...
 
   docker:
