@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"context"
+
 	"github.com/fsouza/go-dockerclient"
 )
 
@@ -15,6 +17,8 @@ type LogStreamer struct {
 	ContainerName string
 	LogWriter     io.WriteCloser
 	ErrWriter     io.WriteCloser
+	Context       context.Context
+	CancelFn      context.CancelFunc
 }
 
 // Go activates streamer
@@ -22,6 +26,7 @@ func (l *LogStreamer) Go() {
 	log.Printf("[INFO] start log streamer for %s", l.ContainerName)
 	go func() {
 		logOpts := docker.LogsOptions{
+			Context:           l.Context,
 			Container:         l.ContainerID,
 			OutputStream:      l.LogWriter, // logs writer for stdout
 			ErrorStream:       l.ErrWriter, // err writer for stderr

@@ -13,6 +13,8 @@ import (
 	"github.com/jessevdk/go-flags"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
+	"context"
+
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
 )
@@ -59,7 +61,10 @@ func main() {
 		if event.Status {
 
 			logWriter, errWriter := MakeLogWriters(event.ContainerName, event.Group)
+			ctx, cancel := context.WithCancel(context.Background())
 			ls := logger.LogStreamer{
+				Context:       ctx,
+				CancelFn:      cancel,
 				DockerClient:  client,
 				ContainerID:   event.ContainerID,
 				ContainerName: event.ContainerName,
@@ -78,6 +83,7 @@ func main() {
 				if e := ls.ErrWriter.Close(); e != nil {
 					log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
 				}
+				ls.CancelFn()
 				delete(containerLogs, event.ContainerID)
 			}
 		}
