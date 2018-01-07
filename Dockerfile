@@ -20,9 +20,8 @@ COPY --from=build /go/src/github.com/umputun/docker-logger/docker-logger /srv/
 RUN chown -R umputun:umputun /srv
 
 USER umputun
-
 WORKDIR /srv
-EXPOSE 8080
 
+VOLUME ["/srv/logs"]
 CMD ["/srv/docker-logger"]
 ENTRYPOINT ["/init.sh"]
