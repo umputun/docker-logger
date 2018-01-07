@@ -74,7 +74,7 @@ func (aw *activeFileWriter) do() {
 	currentDay := time.Now()
 	ticker := time.NewTicker(time.Second)
 
-	fh, err := os.OpenFile(aw.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	fh, err := os.OpenFile(aw.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		log.Printf("[WARN] failed to open %s, %s", aw.path, err)
 		return
@@ -211,7 +211,7 @@ func (aw *activeFileWriter) rotate(fh *os.File) (*os.File, *bufio.Writer, error)
 	}
 
 	// reopen and truncate the original
-	fh, err := os.OpenFile(aw.path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	fh, err := os.OpenFile(aw.path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Printf("[WARN] failed to open %s, %s", aw.path, err)
 		return nil, nil, err
@@ -227,14 +227,14 @@ func (aw *activeFileWriter) compress(srcFile string, destGz string) error {
 
 	log.Printf("[DEBUG] gzip %s to %s", srcFile, destGz)
 
-	w, err := os.OpenFile(destGz, os.O_WRONLY|os.O_CREATE, 0600)
+	w, err := os.OpenFile(destGz, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 
 	gw := gzip.NewWriter(w)
 
-	file, err := os.OpenFile(srcFile, os.O_RDONLY, 0600)
+	file, err := os.OpenFile(srcFile, os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}

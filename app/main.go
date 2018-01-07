@@ -100,7 +100,7 @@ func MakeLogWriters(containerName string, group string) (logWriter, errWriter io
 		if group != "" {
 			logDir = fmt.Sprintf("logs/%s", group)
 		}
-		if err := os.MkdirAll(logDir, 0700); err != nil {
+		if err := os.MkdirAll(logDir, 0755); err != nil {
 			log.Fatalf("[ERROR] can't make directory %s, %v", logDir, err)
 		}
 
