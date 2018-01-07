@@ -12,15 +12,15 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 
 | Command line | Environment | Default                     | Description                               |
 | ------------ | ----------- | --------------------------- | ----------------------------------------- |
-| docker       | DOCKER_HOST | unix:///var/run/docker.sock | docker host                               |
-| syslog-host  | SYSLOG_HOST | 127.0.0.1:514               | syslog remote host                        |
-| files        | LOG_FILES   | No                          | enable logging to files                   |
-| syslog       | LOG_SYSLOG  | No                          | enable logging to syslog                  |
-| max-size     | MAX_SIZE    | 10                          | size of log triggering rotation (MB)      |
-| max-files    | MAX_FILES   | 5                           | number of rotated files to keep           |
-| exclude      | EXCLUDE     |                             | excluded container names, comma separated |
-| flush-recs   | FLUSH_RECS  | 100                         | flush every N records to disk             |
-| flush-time   | FLUSH_TIME  | 1s                          | flush on inactivity interval              |
+| `--docker`       | `DOCKER_HOST` | unix:///var/run/docker.sock | docker host                               |
+| `--syslog-host`  | `SYSLOG_HOST` | 127.0.0.1:514               | syslog remote host                        |
+| `--files`        | `LOG_FILES`   | No                          | enable logging to files                   |
+| `--syslog`       | `LOG_SYSLOG`  | No                          | enable logging to syslog                  |
+| `--max-size`     | `MAX_SIZE`   | 10                          | size of log triggering rotation (MB)      |
+| `--max-files`    | `MAX_FILES`   | 5                           | number of rotated files to keep           |
+| `--max-age`     | `MAX_AGE`     | 30                          | maximum number of days to retain          |
+| `--exclude`      | `EXCLUDE`     |                             | excluded container names, comma separated |
+|                  | `TIME_ZONE`   | UTC                          | Time zone for container                  |
 
 - at least one of destinations (`files` or `syslog`) should be defined
 - location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)

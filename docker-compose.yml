@@ -18,10 +18,10 @@ services:
             - LOG_FILES=true
             - LOG_SYSLOG=false
             - EXCLUDE=monit,logger
+            - MAX_FILES=10
             - MAX_SIZE=50
-            - FLUSH_RECS=1000
-            - FLUSH_TIME=1s
-            - DEBUG=true
+            - MAX_AGE=20
+            - DEBUG=false
             - TIME_ZONE=America/Chicago
 
         volumes:
