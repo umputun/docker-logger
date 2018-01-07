@@ -26,8 +26,8 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 		if _, err = w.Write(p); err != nil {
 			numErrors++
 		}
-
 	}
+
 	// all writers failed, return error
 	if numErrors == len(w.writers) {
 		return len(p), err
