@@ -3,7 +3,7 @@ package logger
 import (
 	"io"
 
-	multierror "github.com/hashicorp/go-multierror"
+	"github.com/hashicorp/go-multierror"
 )
 
 // MultiWriter implements WriteCloser for multiple destinations.

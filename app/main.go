@@ -7,7 +7,6 @@ import (
 	"log"
 	"log/syslog"
 	"os"
-	"time"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/hashicorp/logutils"
@@ -19,17 +18,15 @@ import (
 )
 
 var opts struct {
-	DockerHost    string        `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
-	SyslogHost    string        `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
-	EnableFiles   bool          `long:"files" env:"LOG_FILES" description:"enable logging to files"`
-	EnableSyslog  bool          `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
-	MaxFileSize   int           `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
-	MaxFilesCount int           `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to keep"`
-	MaxFilesAge   int           `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
-	Excludes      []string      `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
-	FlushRecs     int           `long:"flush-recs" env:"FLUSH_RECS" default:"100" description:"flush every N records"`
-	FlushInterval time.Duration `long:"flush-time" env:"FLUSH_TIME" default:"1s" description:"flush inactivity time"`
-	Dbg           bool          `long:"dbg" env:"DEBUG" description:"debug mode"`
+	DockerHost    string   `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
+	SyslogHost    string   `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
+	EnableFiles   bool     `long:"files" env:"LOG_FILES" description:"enable logging to files"`
+	EnableSyslog  bool     `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
+	MaxFileSize   int      `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
+	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to keep"`
+	MaxFilesAge   int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
+	Excludes      []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
+	Dbg           bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
 var revision = "unknown"
