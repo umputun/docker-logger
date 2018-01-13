@@ -1,10 +1,10 @@
 # docker-logger [![Build Status](https://drone.umputun.com/api/badges/umputun/docker-logger/status.svg)](https://drone.umputun.com/umputun/docker-logger)
 
-docker-logger is a small application collecting logs from other docker containers on the host. It can forward both stdout and stderr to local, rotated files and/or remote syslog.
+docker-logger is a small application collecting logs from other docker containers on the host. It can forward both stdout and stderr of containers to local, rotated files and/or to remote syslog.
 
 ## Install
 
-Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run it with `docker-compose up -d`
+Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run it with `docker-compose up -d`. By default `docker-logger` will collect all logs from containers and put it to `./logs` directory.
 
 ## Customization
 
