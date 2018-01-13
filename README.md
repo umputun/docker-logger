@@ -30,5 +30,5 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 ## Build from the source
 
 - clone this repo - `git clone https://github.com/umputun/docker-logger.git`
-- build the logger - `cd docker-logger && docker build -t umputun/logger .`
-- try it - `docker run -it --rm -v $(pwd)/logs:/srv/logs -v /var/run/docker.sock:/var/run/docker.sock /srv/docker-logger --files`
+- build the logger - `cd docker-logger && docker build -t umputun/docker-logger .`
+- try it - `docker run -it --rm -v $(pwd)/logs:/srv/logs -v /var/run/docker.sock:/var/run/docker.sock umputun/docker-logger /srv/docker-logger --files`
