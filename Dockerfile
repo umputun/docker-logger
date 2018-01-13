@@ -29,12 +29,11 @@ FROM alpine:3.7
 RUN apk add --update --no-cache tzdata
 
 COPY --from=build /go/src/github.com/umputun/docker-logger/docker-logger /srv/
-COPY init.sh /srv/init.sh
-RUN chmod +x /srv/init.sh
+COPY init.sh /init.sh
+RUN chmod +x /init.sh
 
-USER root
 WORKDIR /srv
 
 VOLUME ["/srv/logs"]
 CMD ["/srv/docker-logger"]
-ENTRYPOINT ["/srv/init.sh"]
+ENTRYPOINT ["/init.sh"]
