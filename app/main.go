@@ -23,7 +23,7 @@ var opts struct {
 	EnableFiles   bool     `long:"files" env:"LOG_FILES" description:"enable logging to files"`
 	EnableSyslog  bool     `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
 	MaxFileSize   int      `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
-	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to keep"`
+	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
 	MaxFilesAge   int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
 	Excludes      []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Dbg           bool     `long:"dbg" env:"DEBUG" description:"debug mode"`

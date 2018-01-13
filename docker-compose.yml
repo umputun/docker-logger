@@ -17,7 +17,7 @@ services:
             - MHOST
             - LOG_FILES=true
             - LOG_SYSLOG=false
-            - EXCLUDE=monit,logger
+            - EXCLUDE=monit,docker-logger
             - MAX_FILES=10
             - MAX_SIZE=50
             - MAX_AGE=20
