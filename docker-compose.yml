@@ -2,7 +2,7 @@ version: '2'
 
 services:
     remark:
-        image: umputun/logger
+        image: umputun/docker-logger
         container_name: "logger"
         hostname: "logger"
         restart: always
