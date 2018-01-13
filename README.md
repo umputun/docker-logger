@@ -1,4 +1,4 @@
-# docker-logger [![Build Status](https://drone.umputun.com/api/badges/umputun/docker-logger/status.svg)](https://drone.umputun.com/umputun/docker-logger)
+# docker-logger
 
 **docker-logger** is a small application collecting logs from other containers on the host that are started without
 the `-t` option and are configured with a logging driver that works with docker logs (journald and json-file).
