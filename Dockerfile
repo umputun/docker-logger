@@ -8,8 +8,8 @@ ENV GOARCH=amd64
 
 RUN \
     apk add --no-cache --update git &&\
-    go get -u gopkg.in/alecthomas/gometalinter.v1 && \
-    ln -s /go/bin/gometalinter.v1 /go/bin/gometalinter && \
+    go get -u gopkg.in/alecthomas/gometalinter.v2 && \
+    ln -s /go/bin/gometalinter.v2 /go/bin/gometalinter && \
     gometalinter --install --force
 
 ADD . /go/src/github.com/umputun/docker-logger
