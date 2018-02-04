@@ -14,7 +14,6 @@ services:
               max-file: "5"
 
         environment:
-            - MHOST
             - LOG_FILES=true
             - LOG_SYSLOG=false
             - EXCLUDE=monit,docker-logger
