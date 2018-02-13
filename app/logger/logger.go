@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
@@ -36,6 +37,12 @@ func (l *LogStreamer) Go() {
 			InactivityTimeout: time.Hour * 10000,
 		}
 		err := l.DockerClient.Logs(logOpts) // this is blocking call. Will run until container up and will publish to streams
+		if strings.HasPrefix(err.Error(), "error from daemon in stream: Error grabbing logs: EOF") { // workaround https://github.com/moby/moby/issues/35370 with empty log
+			// try read log as empty
+			logOpts.Tail = ""
+			err = l.DockerClient.Logs(logOpts)
+		}
+
 		log.Printf("[INFO] stream from %s terminated, %v", l.ContainerID, err)
 	}()
 }
