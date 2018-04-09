@@ -11,7 +11,7 @@ import (
 	"github.com/fsouza/go-dockerclient"
 	"github.com/hashicorp/logutils"
 	"github.com/jessevdk/go-flags"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
@@ -26,6 +26,7 @@ var opts struct {
 	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
 	MaxFilesAge   int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
 	Excludes      []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
+	ExtJSON       bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
 	Dbg           bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
@@ -56,7 +57,7 @@ func main() {
 
 		if event.Status {
 			// new/started container detected
-			logWriter, errWriter := MakeLogWriters(event.ContainerName, event.Group)
+			logWriter, errWriter := MakeLogWriters(event.ContainerName, event.Group, opts.ExtJSON)
 			ctx, cancel := context.WithCancel(context.Background())
 			ls := logger.LogStreamer{
 				Context:       ctx,
@@ -92,7 +93,7 @@ func main() {
 }
 
 // MakeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
-func MakeLogWriters(containerName string, group string) (logWriter, errWriter io.WriteCloser) {
+func MakeLogWriters(containerName string, group string, isExt bool) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s/%s", group, containerName)
 	if !opts.EnableFiles && !opts.EnableSyslog {
 		log.Printf("[ERROR] either files or syslog has to be enabled")
@@ -145,7 +146,15 @@ func MakeLogWriters(containerName string, group string) (logWriter, errWriter io
 			log.Printf("[WARN] can't connect to syslog, %v", err)
 		}
 	}
-	return logger.NewMultiWriterIgnoreErrors(logWriters...), logger.NewMultiWriterIgnoreErrors(errWriters...)
+
+	lw := logger.NewMultiWriterIgnoreErrors(logWriters...)
+	ew := logger.NewMultiWriterIgnoreErrors(errWriters...)
+	if isExt {
+		lw = lw.WithExtJSON(containerName, group)
+		ew = ew.WithExtJSON(containerName, group)
+	}
+
+	return lw, ew
 }
 
 func setupLog(dbg bool) {
