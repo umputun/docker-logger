@@ -17,6 +17,9 @@ pipeline:
     image: plugins/docker
     repo: umputun/docker-logger
     secrets: [ docker_username, docker_password ]
+    tags:
+      - ${DRONE_COMMIT_BRANCH/\//-}
+      - latest
     when:
       branch: master
       
@@ -24,6 +27,8 @@ pipeline:
     image: plugins/docker
     repo: umputun/docker-logger
     secrets: [ docker_username, docker_password ]
+    tags:
+      - ${DRONE_COMMIT_BRANCH/\//-}
     when:
       branch:
         exclude: [ master, release/* ]
