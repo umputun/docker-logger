@@ -1,4 +1,4 @@
-FROM golang:1.9-alpine as build
+FROM golang:1.10-alpine as build
 
 RUN go version
 
