@@ -23,7 +23,7 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 | `--max-age`     | `MAX_AGE`     | 30                          | maximum number of days to retain          |
 | `--exclude`     | `EXCLUDE`     |                             | excluded container names, comma separated |
 |                 | `TIME_ZONE`   | UTC                         | time zone for container                   |
-| `--json`, `-j`  | `JSON`        | false                       | output formatted as JSON                 |
+| `--json`, `-j`  | `JSON`        | false                       | output formatted as JSON                  |
 
 
 - at least one of destinations (`files` or `syslog`) should be allowed
