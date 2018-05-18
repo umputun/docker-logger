@@ -7,26 +7,31 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"time"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/hashicorp/logutils"
 	"github.com/jessevdk/go-flags"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
 )
 
 var opts struct {
-	DockerHost    string   `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
-	SyslogHost    string   `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
-	EnableFiles   bool     `long:"files" env:"LOG_FILES" description:"enable logging to files"`
-	EnableSyslog  bool     `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
-	MaxFileSize   int      `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
-	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
-	MaxFilesAge   int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
-	Excludes      []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
-	Dbg           bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
+	DockerHost         string   `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
+	SyslogHost         string   `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
+	EnableFiles        bool     `long:"files" env:"LOG_FILES" description:"enable logging to files"`
+	EnableSyslog       bool     `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
+	MaxFileSize        int      `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
+	MaxFilesCount      int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
+	MaxFilesAge        int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
+	Excludes           []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
+	TimeRotate         bool     `long:"time-rotate" env:"TIME_ROTATE" description:"enable time roate mode"`
+	TimeRotateDuration int      `long:"time-rotate-duration" env:"TIME_ROTATE_DURATION" default:"300" description:"time roate duration second"`
+	TimeRotateFormat   string   `long:"time-rotate-format" env:"TIME_ROTATE_FORMAT" default:"%Y-%m-%d_%H-%M"  description:"time roate format"`
+	Dbg                bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
 var revision = "unknown"
@@ -112,25 +117,52 @@ func MakeLogWriters(containerName string, group string) (logWriter, errWriter io
 		}
 
 		logName := fmt.Sprintf("%s/%s.log", logDir, containerName)
-		logFileWriter := lumberjack.Logger{
-			Filename:   logName,
-			MaxSize:    opts.MaxFileSize, // megabytes
-			MaxBackups: opts.MaxFilesCount,
-			MaxAge:     opts.MaxFilesAge, //days
-			Compress:   true,
-		}
-
 		errFname := fmt.Sprintf("%s/%s.err", logDir, containerName)
-		errFileWriter := lumberjack.Logger{
-			Filename:   errFname,
-			MaxSize:    opts.MaxFileSize, // megabytes
-			MaxBackups: opts.MaxFilesCount,
-			MaxAge:     opts.MaxFilesAge, //days
-			Compress:   true,
+
+		if !opts.TimeRotate {
+
+			logFileWriter := lumberjack.Logger{
+				Filename:   logName,
+				MaxSize:    opts.MaxFileSize, // megabytes
+				MaxBackups: opts.MaxFilesCount,
+				MaxAge:     opts.MaxFilesAge, //days
+				Compress:   true,
+			}
+
+			errFileWriter := lumberjack.Logger{
+				Filename:   errFname,
+				MaxSize:    opts.MaxFileSize, // megabytes
+				MaxBackups: opts.MaxFilesCount,
+				MaxAge:     opts.MaxFilesAge, //days
+				Compress:   true,
+			}
+
+			logWriters = append(logWriters, &logFileWriter)
+			errWriters = append(errWriters, &errFileWriter)
+		} else {
+			log.Printf("[DEBUG] create time log writer for %s/%s", group, containerName)
+			logTimeFileWriter, err := rotatelogs.New(
+				logName + "." + opts.TimeRotateFormat,
+				//rotatelogs.WithLinkName("/path/to/access_log"),
+				rotatelogs.WithMaxAge(24*time.Hour),
+				rotatelogs.WithRotationTime(time.Duration(opts.TimeRotateDuration)*time.Second),
+			)
+			if err != nil {
+				fmt.Println("create time rotate log failed:", err)
+			}
+			errTimeFileWriter, err := rotatelogs.New(
+				errFname + "." + opts.TimeRotateFormat,
+				//rotatelogs.WithLinkName("/path/to/access_log"),
+				rotatelogs.WithMaxAge(24*time.Hour),
+				rotatelogs.WithRotationTime(time.Duration(opts.TimeRotateDuration)*time.Second),
+			)
+			if err != nil {
+				fmt.Println("create time rotate err log failed:", err)
+			}
+			logWriters = append(logWriters, logTimeFileWriter)
+			errWriters = append(errWriters, errTimeFileWriter)
 		}
 
-		logWriters = append(logWriters, &logFileWriter)
-		errWriters = append(errWriters, &errFileWriter)
 		log.Printf("[INFO] loggers created for %s and %s, max.size=%dM, max.files=%d, max.days=%d",
 			logName, errFname, opts.MaxFileSize, opts.MaxFilesCount, opts.MaxFilesAge)
 	}
