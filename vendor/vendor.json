@@ -262,6 +262,24 @@
 			"revisionTime": "2016-06-26T16:29:48Z"
 		},
 		{
+			"checksumSHA1": "WGhnX2/+6YAJ3J0hTg6MekAtHlk=",
+			"path": "github.com/lestrrat-go/file-rotatelogs",
+			"revision": "81893a53aa4f78667bfe43dc2e966f5ba894383c",
+			"revisionTime": "2018-04-14T11:57:38Z"
+		},
+		{
+			"checksumSHA1": "kCiYjWVsI7JrUA9SogAebi2cp00=",
+			"path": "github.com/lestrrat-go/file-rotatelogs/internal/option",
+			"revision": "81893a53aa4f78667bfe43dc2e966f5ba894383c",
+			"revisionTime": "2018-04-14T11:57:38Z"
+		},
+		{
+			"checksumSHA1": "uPeOtuNC86moJndri53k0VokFWc=",
+			"path": "github.com/lestrrat-go/strftime",
+			"revision": "59966ecb6d84ec0010de6a5b8deae0299ce5b549",
+			"revisionTime": "2018-04-14T11:28:01Z"
+		},
+		{
 			"checksumSHA1": "OFNit1Qx2DdWhotfREKodDNUwCM=",
 			"path": "github.com/opencontainers/go-digest",
 			"revision": "279bed98673dd5bef374d3b6e4b09e2af76183bf",
@@ -319,6 +337,18 @@
 			"revisionTime": "2017-08-14T20:04:35Z"
 		},
 		{
+			"checksumSHA1": "FvX8oprPsmmQ+K6FK+61CjVMqfg=",
+			"path": "github.com/umputun/docker-logger/app/discovery",
+			"revision": "403f0caf511501f20c2246bbbcff15a2734be736",
+			"revisionTime": "2018-02-13T18:00:03Z"
+		},
+		{
+			"checksumSHA1": "pHUl6FDdDbwvhFBnEwZ22qWh2n4=",
+			"path": "github.com/umputun/docker-logger/app/logger",
+			"revision": "403f0caf511501f20c2246bbbcff15a2734be736",
+			"revisionTime": "2018-02-13T18:00:03Z"
+		},
+		{
 			"checksumSHA1": "X1NTlfcau2XcV6WtAHF6b/DECOA=",
 			"path": "golang.org/x/crypto/ssh/terminal",
 			"revision": "0fcca4842a8d74bfddc2c96a073bd2a4d2a7a2e8",
@@ -357,5 +387,5 @@
 			"revisionTime": "2017-05-31T16:03:50Z"
 		}
 	],
-	"rootPath": "github.com/umputun/docker-logger"
+	"rootPath": "github.com/yuzhiquan/docker-logger"
 }
