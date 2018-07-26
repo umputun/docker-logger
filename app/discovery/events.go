@@ -70,7 +70,6 @@ func (e *EventNotif) activate(client DockerClient) {
 	downStatuses := []string{"die", "destroy", "stop", "pause"}
 
 	for dockerEvent := range dockerEventsCh {
-		log.Printf("!!! %+v", dockerEvent)
 		if dockerEvent.Type == "container" {
 
 			if !contains(dockerEvent.Status, upStatuses) && !contains(dockerEvent.Status, downStatuses) {
