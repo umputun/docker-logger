@@ -34,7 +34,6 @@
   version = "v1.1.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/docker/docker"
   packages = [
     "api/types",
@@ -48,23 +47,18 @@
     "api/types/swarm",
     "api/types/swarm/runtime",
     "api/types/versions",
-    "errdefs",
     "opts",
-    "pkg/archive",
     "pkg/fileutils",
     "pkg/homedir",
     "pkg/idtools",
     "pkg/ioutils",
-    "pkg/jsonmessage",
     "pkg/longpath",
     "pkg/mount",
     "pkg/pools",
     "pkg/stdcopy",
-    "pkg/system",
-    "pkg/term",
-    "pkg/term/windows"
+    "pkg/system"
   ]
-  revision = "c3a02077149ea8ee1d53b2b60a3d36c29d1505f8"
+  revision = "a422774e593b33bd287d9890544ad9e09b380d8c"
 
 [[projects]]
   name = "github.com/docker/go-connections"
@@ -79,15 +73,15 @@
   version = "v0.3.3"
 
 [[projects]]
-  name = "github.com/docker/libnetwork"
-  packages = ["ipamutils"]
-  revision = "6d23f11e681f24ee31802939e243fe8be41a75eb"
-  version = "v0.8.0-dev.2"
-
-[[projects]]
   name = "github.com/fsouza/go-dockerclient"
-  packages = ["."]
-  revision = "413e380d74dfeddac90c0b89c598a1c7b19f5c54"
+  packages = [
+    ".",
+    "internal/archive",
+    "internal/jsonmessage",
+    "internal/term"
+  ]
+  revision = "8842d40dbf5ee062d80f9dc429db31a0fe0cdc73"
+  version = "v1.2.2"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -132,10 +126,7 @@
 
 [[projects]]
   name = "github.com/opencontainers/runc"
-  packages = [
-    "libcontainer/system",
-    "libcontainer/user"
-  ]
+  packages = ["libcontainer/user"]
   revision = "baf6536d6259209c3edfa2b22237af82942d3dfa"
   version = "v0.1.1"
 
@@ -169,10 +160,7 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
-  packages = [
-    "context",
-    "context/ctxhttp"
-  ]
+  packages = ["context"]
   revision = "3673e40ba22529d22c3fd7c93e97b0ce50fa7bdd"
 
 [[projects]]
@@ -193,6 +181,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "3819bd2e53060433761a90d4dd495db7dd6f4c4775e81abc12fbe8a0148a7dbc"
+  inputs-digest = "d53369a65fe456b7d1e2f7b5b930953f85080dcd206d25822200100d91154578"
   solver-name = "gps-cdcl"
   solver-version = 1

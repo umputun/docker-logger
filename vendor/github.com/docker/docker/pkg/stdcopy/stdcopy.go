@@ -21,7 +21,7 @@ const (
 	// Stderr represents standard error steam type.
 	Stderr
 	// Systemerr represents errors originating from the system that make it
-	// into the multiplexed stream.
+	// into the the multiplexed stream.
 	Systemerr
 
 	stdWriterPrefixLen = 8

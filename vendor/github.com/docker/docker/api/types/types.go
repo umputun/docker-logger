@@ -512,8 +512,7 @@ type DiskUsage struct {
 	Images      []*ImageSummary
 	Containers  []*Container
 	Volumes     []*Volume
-	BuildCache  []*BuildCache
-	BuilderSize int64 // deprecated
+	BuilderSize int64
 }
 
 // ContainersPruneReport contains the response for Engine API:
@@ -585,18 +584,4 @@ type PushResult struct {
 // BuildResult contains the image id of a successful build
 type BuildResult struct {
 	ID string
-}
-
-// BuildCache contains information about a build cache record
-type BuildCache struct {
-	ID      string
-	Mutable bool
-	InUse   bool
-	Size    int64
-
-	CreatedAt   time.Time
-	LastUsedAt  *time.Time
-	UsageCount  int
-	Parent      string
-	Description string
 }
