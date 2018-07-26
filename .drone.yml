@@ -5,7 +5,7 @@ workspace:
 pipeline:
   
   build:
-    image: golang:1.9-alpine
+    image: golang:1.10-alpine
     commands:
       - cd app
       - export CGO_ENABLED=0
@@ -17,16 +17,29 @@ pipeline:
     image: plugins/docker
     repo: umputun/docker-logger
     secrets: [ docker_username, docker_password ]
+    tags:
+      - ${DRONE_COMMIT_BRANCH/\//-}
+      - latest
     when:
       branch: master
-    event: push
+      event: push
 
   docker_branch:
     image: plugins/docker
     repo: umputun/docker-logger
     secrets: [ docker_username, docker_password ]
+    tags:
+      - ${DRONE_COMMIT_BRANCH/\//-}
     when:
       branch:
         exclude: [ master, release/* ]
-    event: push
-  
+        event: push
+
+  docker-pullrequest:
+    image: docker
+    commands:
+      - docker build .
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    when:
+      event: pull_request

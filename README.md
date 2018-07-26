@@ -22,7 +22,9 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 | `--max-files`   | `MAX_FILES`   | 5                           | number of rotated files to retain         |
 | `--max-age`     | `MAX_AGE`     | 30                          | maximum number of days to retain          |
 | `--exclude`     | `EXCLUDE`     |                             | excluded container names, comma separated |
-|                 | `TIME_ZONE`   | UTC                         | Time zone for container                   |
+|                 | `TIME_ZONE`   | UTC                         | time zone for container                   |
+| `--json`, `-j`  | `JSON`        | false                       | output formatted as JSON                  |
+
 
 - at least one of destinations (`files` or `syslog`) should be allowed
 - location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)
