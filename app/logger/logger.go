@@ -53,6 +53,7 @@ func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 			if err != nil && strings.HasPrefix(err.Error(), "error from daemon in stream: Error grabbing logs: EOF") {
 				logOpts.Tail = ""
 				time.Sleep(1 * time.Second) // prevent busy loop
+				log.Print("[DEBUG] retry logger")
 				continue
 			}
 			break
@@ -71,5 +72,11 @@ func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 // Close kills streamer
 func (l *LogStreamer) Close() {
 	l.cancel()
+	l.Wait()
+	log.Printf("[DEBUG] close %s", l.ContainerID)
+}
+
+// Wait for stream completion
+func (l *LogStreamer) Wait() {
 	<-l.ctx.Done()
 }

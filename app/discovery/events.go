@@ -29,14 +29,13 @@ type Event struct {
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient *docker.Client, excludes []string) (*EventNotif, error) {
+func NewEventNotif(dockerClient *docker.Client, excludes ...string) (*EventNotif, error) {
 	log.Printf("[DEBUG] create events notif for %s, excludes: %+v", dockerClient.Endpoint(), excludes)
 	res := EventNotif{
 		dockerClient: dockerClient,
 		excludes:     excludes,
 		eventsCh:     make(chan Event, 100),
 	}
-
 	go func() {
 		// first get all currently running containers
 		if err := res.emitRunningContainers(); err != nil {

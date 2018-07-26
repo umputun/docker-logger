@@ -57,7 +57,7 @@ func main() {
 		log.Fatalf("[ERROR] failed to make docker client %s, %v", opts.DockerHost, err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes)
+	events, err := discovery.NewEventNotif(client, opts.Excludes...)
 	if err != nil {
 		log.Fatalf("[ERROR] failed to make event notifier, %v", err)
 	}

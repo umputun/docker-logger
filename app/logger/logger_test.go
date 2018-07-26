@@ -16,37 +16,44 @@ type mockLogClient struct {
 	ctx context.Context
 }
 
-func (m *mockLogClient) Logs(docker.LogsOptions) error {
+func (m *mockLogClient) Logs(opts docker.LogsOptions) error {
 	select {
 	case <-time.After(2 * time.Second):
-		log.Print("mock log completed")
-		return nil
+		log.Printf("mock log completed %+v", opts)
+		m.err = nil
 	case <-m.ctx.Done():
-		log.Print("mock log terminated")
-		return m.ctx.Err()
+		log.Printf("mock log terminated %+v", opts)
+		m.err = m.ctx.Err()
 	}
+	return m.err
 }
 
 func TestLogger_WithError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: &mockLogClient{err: nil, ctx: ctx}}
+	mock := mockLogClient{err: nil, ctx: ctx}
+	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: &mock}
 	l = l.Go(ctx)
-
+	st := time.Now()
 	go func() {
 		// trigger error in mockLogClient
 		time.Sleep(1 * time.Second)
 		cancel()
 	}()
-
-	err := l.DockerClient.Logs(docker.LogsOptions{})
-	assert.Error(t, err, "context canceled")
+	l.Wait()
+	assert.True(t, time.Since(st) < time.Second*2, "terminated early")
 }
 
-func TestLogger_NoError(t *testing.T) {
+func TestLogger_Cancel(t *testing.T) {
 	ctx := context.Background()
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: &mockLogClient{err: nil, ctx: ctx}}
 	l = l.Go(ctx)
 
-	err := l.DockerClient.Logs(docker.LogsOptions{})
-	assert.NoError(t, err)
+	go func() {
+		// trigger close
+		time.Sleep(2 * time.Second)
+		l.Close()
+	}()
+	st := time.Now()
+	l.Wait()
+	assert.True(t, time.Since(st) >= time.Second*2, "completed")
 }
