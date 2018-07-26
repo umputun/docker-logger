@@ -188,9 +188,12 @@
   version = "v1.0.4"
 
 [[projects]]
-  digest = "1:1f37c313333ab92ceaa17b1f7f4427e316f58147d0a5dce1665e2d3091851e9a"
+  digest = "1:498565cf249f70c3008005cf92a90ef6c04fd0f310c4fcbf384cef62645bdf71"
   name = "github.com/stretchr/testify"
-  packages = ["assert"]
+  packages = [
+    "assert",
+    "require",
+  ]
   pruneopts = "UT"
   revision = "2aa2c176b9dab406a6970f6a55f513e8a8c8b18f"
 
@@ -238,6 +241,7 @@
     "github.com/jessevdk/go-flags",
     "github.com/pkg/errors",
     "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/require",
     "gopkg.in/natefinch/lumberjack.v2",
   ]
   solver-name = "gps-cdcl"
