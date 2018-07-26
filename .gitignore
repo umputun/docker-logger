@@ -3,3 +3,4 @@
 *.cov
 /logs/
 .DS_Store
+.vscode
