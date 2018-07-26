@@ -10,9 +10,14 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
+// LogClient wraps DockerClient with the minimal interface
+type LogClient interface {
+	Logs(docker.LogsOptions) error
+}
+
 // LogStreamer connects and activates container's log stream with io.Writer
 type LogStreamer struct {
-	DockerClient  *docker.Client
+	DockerClient  LogClient
 	ContainerID   string
 	ContainerName string
 
