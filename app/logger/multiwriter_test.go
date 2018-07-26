@@ -11,12 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type wrMock struct {
-	bytes.Buffer
-}
-
-func (m *wrMock) Close() error { return nil }
-
 func TestMultiWriter_Write(t *testing.T) {
 
 	// with ext JSON
@@ -60,3 +54,9 @@ func TestMultiWriter_extJSON(t *testing.T) {
 	assert.Equal(t, hname, j.Host)
 	assert.True(t, time.Since(j.TS).Seconds() < 1)
 }
+
+type wrMock struct {
+	bytes.Buffer
+}
+
+func (m *wrMock) Close() error { return nil }

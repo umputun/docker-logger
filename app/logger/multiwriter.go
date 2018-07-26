@@ -7,16 +7,17 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 )
 
 // MultiWriter implements WriteCloser for multiple destinations.
-// It is simplified version of stdlib MultiWriter. Ignores write error and don't stop the loop.
+// It is simplified version of stdlib MultiWriter. Ignores write error and don't stop the loop unless all writes failed.
 type MultiWriter struct {
 	writers   []io.WriteCloser
 	hostname  string
 	container string
 	group     string
-	isExt     bool
+	isJSON    bool
 }
 
 // jMsg is envelope for ExtJSON mode
@@ -40,22 +41,22 @@ func NewMultiWriterIgnoreErrors(writers ...io.WriteCloser) *MultiWriter {
 func (w *MultiWriter) WithExtJSON(containerName string, group string) *MultiWriter {
 	w.container = containerName
 	w.group = group
-	w.isExt = true
+	w.isJSON = true
 
-	hname := "unknown"
+	hostname := "unknown"
 	if h, err := os.Hostname(); err == nil {
-		hname = h
+		hostname = h
 	}
-	w.hostname = hname
+	w.hostname = hostname
 	return w
 }
 
 // Write to all writers and ignore errors unless they all have errors
 func (w *MultiWriter) Write(p []byte) (n int, err error) {
 	pp := p
-	if w.isExt {
+	if w.isJSON {
 		if pp, err = w.extJSON(p); err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "can't convert message to json")
 		}
 	}
 
@@ -68,7 +69,7 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 
 	// all writers failed, return error
 	if numErrors == len(w.writers) {
-		return len(p), err
+		return len(p), errors.Wrap(err, "all writers failed")
 	}
 
 	return len(p), nil

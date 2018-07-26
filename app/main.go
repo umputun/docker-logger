@@ -7,8 +7,10 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/fsouza/go-dockerclient"
+	dockerclient "github.com/fsouza/go-dockerclient"
 	"github.com/hashicorp/logutils"
 	"github.com/jessevdk/go-flags"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -41,62 +43,86 @@ func main() {
 
 	log.Printf("[INFO] options: %+v", opts)
 
-	client, err := docker.NewClient(opts.DockerHost)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { // catch signal and invoke graceful termination
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+		<-stop
+		log.Print("[WARN] interrupt signal")
+		cancel()
+	}()
+
+	client, err := dockerclient.NewClient(opts.DockerHost)
 	if err != nil {
 		log.Fatalf("[ERROR] failed to make docker client %s, %v", opts.DockerHost, err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes)
+	events, err := discovery.NewEventNotif(client, opts.Excludes...)
 	if err != nil {
 		log.Fatalf("[ERROR] failed to make event notifier, %v", err)
 	}
 
-	containerLogs := map[string]logger.LogStreamer{}
+	runEventLoop(ctx, events, client)
+}
 
-	for event := range events.Channel() {
+func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *dockerclient.Client) {
+	logStreams := map[string]logger.LogStreamer{}
+
+	procEvent := func(event discovery.Event) {
 
 		if event.Status {
 			// new/started container detected
-			logWriter, errWriter := MakeLogWriters(event.ContainerName, event.Group, opts.ExtJSON)
-			ctx, cancel := context.WithCancel(context.Background())
+			logWriter, errWriter := makeLogWriters(event.ContainerName, event.Group, opts.ExtJSON)
 			ls := logger.LogStreamer{
-				Context:       ctx,
-				CancelFn:      cancel,
 				DockerClient:  client,
 				ContainerID:   event.ContainerID,
 				ContainerName: event.ContainerName,
 				LogWriter:     logWriter,
 				ErrWriter:     errWriter,
 			}
-			containerLogs[event.ContainerID] = ls
-			ls.Go()
-			continue
+			ls = *ls.Go(ctx)
+			logStreams[event.ContainerID] = ls
+			log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
+			return
 		}
 
 		// removed/stopped container detected
-		ls, ok := containerLogs[event.ContainerID]
+		ls, ok := logStreams[event.ContainerID]
 		if !ok {
 			log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
-			continue
+			return
 		}
 
 		log.Printf("[DEBUG] close loggers for %+v", event)
-		ls.CancelFn()
+		ls.Close()
+
 		if e := ls.LogWriter.Close(); e != nil {
 			log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
 		}
 		if e := ls.ErrWriter.Close(); e != nil {
 			log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
 		}
-		delete(containerLogs, event.ContainerID)
+		delete(logStreams, event.ContainerID)
+		log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
 	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Print("[WARN] event loop terminated")
+			return
+		case event := <-events.Channel():
+			procEvent(event)
+		}
+	}
+
 }
 
-// MakeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
-func MakeLogWriters(containerName string, group string, isExt bool) (logWriter, errWriter io.WriteCloser) {
+// makeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
+func makeLogWriters(containerName string, group string, isExt bool) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s/%s", group, containerName)
 	if !opts.EnableFiles && !opts.EnableSyslog {
-		log.Printf("[ERROR] either files or syslog has to be enabled")
+		log.Fatalf("[ERROR] either files or syslog has to be enabled")
 	}
 
 	logWriters := []io.WriteCloser{} // collect log writers here, for MultiWriter use

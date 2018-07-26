@@ -32,7 +32,7 @@ pipeline:
       - ${DRONE_COMMIT_BRANCH/\//-}
     when:
       branch:
-        exclude: [ master, release/* ]
+        exclude: [master, release/*]
         event: push
 
   docker-pullrequest:

@@ -1,4 +1,4 @@
-# docker-logger [![Build Status](https://travis-ci.org/umputun/docker-logger.svg?branch=master)](https://travis-ci.org/umputun/docker-logger) [![Docker Automated build](https://img.shields.io/docker/automated/jrottenberg/ffmpeg.svg)](https://hub.docker.com/r/umputun/docker-logger/)
+# docker-logger [![Build Status](https://travis-ci.org/umputun/docker-logger.svg?branch=master)](https://travis-ci.org/umputun/docker-logger) [![Coverage Status](https://coveralls.io/repos/github/umputun/docker-logger/badge.svg)](https://coveralls.io/github/umputun/docker-logger) [![Go Report Card](https://goreportcard.com/badge/github.com/umputun/docker-logger)](https://goreportcard.com/report/github.com/umputun/docker-logger) [![Docker Automated build](https://img.shields.io/docker/automated/jrottenberg/ffmpeg.svg)](https://hub.docker.com/r/umputun/docker-logger/)
 
 **docker-logger** is a small application collecting logs from other containers on the host that started without
 the `-t` option and configured with a logging driver that works with docker logs (journald and json-file).
