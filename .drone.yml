@@ -19,7 +19,8 @@ pipeline:
     secrets: [ docker_username, docker_password ]
     when:
       branch: master
-      
+    event: push
+
   docker_branch:
     image: plugins/docker
     repo: umputun/docker-logger
@@ -27,3 +28,5 @@ pipeline:
     when:
       branch:
         exclude: [ master, release/* ]
+    event: push
+  

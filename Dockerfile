@@ -1,16 +1,4 @@
-FROM golang:1.9-alpine as build
-
-RUN go version
-
-ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
-
-RUN \
-    apk add --no-cache --update git &&\
-    go get -u gopkg.in/alecthomas/gometalinter.v2 && \
-    ln -s /go/bin/gometalinter.v2 /go/bin/gometalinter && \
-    gometalinter --install --force
+FROM umputun/baseimage:buildgo-latest as build
 
 ADD . /go/src/github.com/umputun/docker-logger
 WORKDIR /go/src/github.com/umputun/docker-logger
