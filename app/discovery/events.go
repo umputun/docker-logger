@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
+	"github.com/pkg/errors"
 )
 
 // EventNotif emits all changes from all containers states
@@ -96,7 +97,7 @@ func (e *EventNotif) emitRunningContainers() error {
 
 	containers, err := e.dockerClient.ListContainers(docker.ListContainersOptions{All: false})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "can't list containers")
 	}
 	log.Printf("[DEBUG] total containers = %d", len(containers))
 
@@ -117,7 +118,6 @@ func (e *EventNotif) emitRunningContainers() error {
 		e.eventsCh <- event
 	}
 	log.Print("[DEBUG] completed initial emit")
-
 	return nil
 }
 

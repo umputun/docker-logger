@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 )
 
 // MultiWriter implements WriteCloser for multiple destinations.
@@ -42,11 +43,11 @@ func (w *MultiWriter) WithExtJSON(containerName string, group string) *MultiWrit
 	w.group = group
 	w.isExt = true
 
-	hname := "unknown"
+	hostname := "unknown"
 	if h, err := os.Hostname(); err == nil {
-		hname = h
+		hostname = h
 	}
-	w.hostname = hname
+	w.hostname = hostname
 	return w
 }
 
@@ -55,7 +56,7 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 	pp := p
 	if w.isExt {
 		if pp, err = w.extJSON(p); err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "can't convert message to json")
 		}
 	}
 
@@ -68,7 +69,7 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 
 	// all writers failed, return error
 	if numErrors == len(w.writers) {
-		return len(p), err
+		return len(p), errors.Wrap(err, "all writers failed")
 	}
 
 	return len(p), nil

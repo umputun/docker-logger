@@ -15,10 +15,12 @@ type LogStreamer struct {
 	DockerClient  *docker.Client
 	ContainerID   string
 	ContainerName string
-	LogWriter     io.WriteCloser
-	ErrWriter     io.WriteCloser
-	Context       context.Context
-	CancelFn      context.CancelFunc
+
+	LogWriter io.WriteCloser
+	ErrWriter io.WriteCloser
+
+	Context  context.Context
+	CancelFn context.CancelFunc
 }
 
 // Go activates streamer
@@ -36,14 +38,19 @@ func (l *LogStreamer) Go() {
 			Stderr:            true,
 			InactivityTimeout: time.Hour * 10000,
 		}
-		err := l.DockerClient.Logs(logOpts) // this is blocking call. Will run until container up and will publish to streams
 
-		// workaround https://github.com/moby/moby/issues/35370 with empty log, try read log as empty
-		if err != nil && strings.HasPrefix(err.Error(), "error from daemon in stream: Error grabbing logs: EOF") {
-			logOpts.Tail = ""
-			err = l.DockerClient.Logs(logOpts)
+		var err error
+		for {
+			err = l.DockerClient.Logs(logOpts) // this is blocking call. Will run until container up and will publish to streams
+			// workaround https://github.com/moby/moby/issues/35370 with empty log, try read log as empty
+			if err != nil && strings.HasPrefix(err.Error(), "error from daemon in stream: Error grabbing logs: EOF") {
+				logOpts.Tail = ""
+				time.Sleep(1 * time.Second) // prevent busy loop
+				continue
+			}
+			break
 		}
 
-		log.Printf("[INFO] stream from %s terminated, %v", l.ContainerID, err)
+		log.Printf("[WARN] stream from %s terminated, %v", l.ContainerID, err)
 	}()
 }
