@@ -11,9 +11,7 @@ pipeline:
       - export CGO_ENABLED=0
       - export GOOS=linux
       - export GOARCH=amd64
-      - export
       - go build -v ./...
-      - go test ./...
 
   docker_master:
     image: plugins/docker
@@ -27,16 +25,15 @@ pipeline:
       event: push
 
   docker_branch:
-    image: docker
-    commands:
-      - docker build .
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    image: plugins/docker
+    repo: umputun/docker-logger
+    secrets: [ docker_username, docker_password ]
+    tags:
+      - ${DRONE_COMMIT_BRANCH/\//-}
     when:
       branch:
-        exclude: [ master, release/* ]
+        exclude: [master, release/*]
         event: push
-
 
   docker-pullrequest:
     image: docker

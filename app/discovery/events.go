@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	dockerclient "github.com/fsouza/go-dockerclient"
 	"github.com/pkg/errors"
 )
 
 // EventNotif emits all changes from all containers states
 type EventNotif struct {
-	dockerClient *docker.Client
+	dockerClient DockerClient
 	excludes     []string
 	eventsCh     chan Event
 }
@@ -26,11 +26,17 @@ type Event struct {
 	Status        bool
 }
 
+// DockerClient defines interface listing containers and subscribing to events
+type DockerClient interface {
+	ListContainers(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error)
+	AddEventListener(listener chan<- *dockerclient.APIEvents) error
+}
+
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient *docker.Client, excludes ...string) (*EventNotif, error) {
-	log.Printf("[DEBUG] create events notif for %s, excludes: %+v", dockerClient.Endpoint(), excludes)
+func NewEventNotif(dockerClient DockerClient, excludes ...string) (*EventNotif, error) {
+	log.Printf("[DEBUG] create events notif, excludes: %+v", excludes)
 	res := EventNotif{
 		dockerClient: dockerClient,
 		excludes:     excludes,
@@ -54,8 +60,8 @@ func (e *EventNotif) Channel() (res <-chan Event) {
 
 // activate starts blocking listener for all docker events
 // filters everything except "container" type, detects stop/start events and publishes to eventsCh
-func (e *EventNotif) activate(client *docker.Client) {
-	dockerEventsCh := make(chan *docker.APIEvents)
+func (e *EventNotif) activate(client DockerClient) {
+	dockerEventsCh := make(chan *dockerclient.APIEvents)
 	if err := client.AddEventListener(dockerEventsCh); err != nil {
 		log.Fatalf("[ERROR] can't add even listener, %v", err)
 	}
@@ -64,6 +70,7 @@ func (e *EventNotif) activate(client *docker.Client) {
 	downStatuses := []string{"die", "destroy", "stop", "pause"}
 
 	for dockerEvent := range dockerEventsCh {
+		log.Printf("!!! %+v", dockerEvent)
 		if dockerEvent.Type == "container" {
 
 			if !contains(dockerEvent.Status, upStatuses) && !contains(dockerEvent.Status, downStatuses) {
@@ -94,7 +101,7 @@ func (e *EventNotif) activate(client *docker.Client) {
 // emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events
 func (e *EventNotif) emitRunningContainers() error {
 
-	containers, err := e.dockerClient.ListContainers(docker.ListContainersOptions{All: false})
+	containers, err := e.dockerClient.ListContainers(dockerclient.ListContainersOptions{All: false})
 	if err != nil {
 		return errors.Wrap(err, "can't list containers")
 	}

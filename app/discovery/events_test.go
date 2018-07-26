@@ -1,94 +1,54 @@
 package discovery
 
 import (
-	"context"
-	"os"
-	"os/exec"
+	"log"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	dockerclient "github.com/fsouza/go-dockerclient"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEvents(t *testing.T) {
 
-	dockerHost := os.Getenv("DOCKER_HOST")
-	if dockerHost == "" {
-		dockerHost = "unix:///var/run/docker.sock"
-	}
-	client, err := dockerclient.NewClient(dockerHost)
-	require.NoError(t, err)
+	client := &mockDockerClient{}
 	events, err := NewEventNotif(client, "tst_exclude")
 	require.NoError(t, err)
+	time.Sleep(10 * time.Millisecond)
+	go client.add("id1", "name1")
 
-	ctx := startTestContainer("tst_lg1")
+	ev := <-events.Channel()
+	assert.Equal(t, "name1", ev.ContainerName)
+	assert.Equal(t, true, ev.Status, "started")
 
-	for {
-		ev := <-events.Channel()
-		if ev.ContainerName != "tst_lg1" {
-			continue
-		}
-		assert.Equal(t, "tst_lg1", ev.ContainerName)
-		assert.Equal(t, true, ev.Status, "started")
-		break
-	}
-	<-ctx.Done() // terminate container
-
-	for {
-		ev := <-events.Channel()
-		if ev.ContainerName != "tst_lg1" {
-			continue
-		}
-		assert.Equal(t, "tst_lg1", ev.ContainerName)
-		assert.Equal(t, false, ev.Status, "stopped")
-		break
-	}
+	go client.remove("id1")
+	ev = <-events.Channel()
+	assert.Equal(t, "id1", ev.ContainerID)
+	assert.Equal(t, false, ev.Status, "stopped")
 }
 
 func TestEmit(t *testing.T) {
-	ctx := startTestContainer("tst_lg1")
+	client := &mockDockerClient{}
+	time.Sleep(10 * time.Millisecond)
 
-	dockerHost := os.Getenv("DOCKER_HOST")
-	if dockerHost == "" {
-		dockerHost = "unix:///var/run/docker.sock"
-	}
+	client.add("id1", "name1")
+	client.add("id2", "tst_exclude")
+	client.add("id2", "name2")
 
-	client, err := dockerclient.NewClient(dockerHost)
-
-	require.NoError(t, err)
 	events, err := NewEventNotif(client, "tst_exclude")
 	require.NoError(t, err)
 
-	for {
-		ev := <-events.Channel()
-		if ev.ContainerName != "tst_lg1" {
-			continue
-		}
-		assert.Equal(t, "tst_lg1", ev.ContainerName)
-		assert.Equal(t, true, ev.Status, "started")
-		break
-	}
+	ev := <-events.Channel()
+	assert.Equal(t, "name1", ev.ContainerName)
+	assert.Equal(t, true, ev.Status, "started")
 
-	<-ctx.Done() // terminate container
+	ev = <-events.Channel()
+	assert.Equal(t, "name2", ev.ContainerName)
+	assert.Equal(t, true, ev.Status, "started")
 }
 
-func startTestContainer(name string) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--name="+name, "alpine", "sleep", "3")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Run()
-	}()
-	go func() {
-		time.Sleep(5 * time.Second)
-		cancel()
-	}()
-	return ctx
-}
 func TestGroup(t *testing.T) {
 
 	d := EventNotif{}
@@ -117,4 +77,56 @@ func TestGroup(t *testing.T) {
 	for _, tt := range tbl {
 		assert.Equal(t, tt.out, d.group(tt.inp))
 	}
+}
+
+type mockDockerClient struct {
+	containers []dockerclient.APIContainers
+	events     chan<- *dockerclient.APIEvents
+	sync.Mutex
+}
+
+func (m *mockDockerClient) add(id string, name string) {
+	m.Lock()
+	defer m.Unlock()
+	m.containers = append(m.containers, dockerclient.APIContainers{ID: id, Names: []string{name}})
+	ev := dockerclient.APIEvents{Type: "container", ID: id, Status: "start"}
+	ev.Actor.Attributes = map[string]string{}
+	ev.Actor.Attributes["name"] = name
+	ev.Actor.ID = id
+	if m.events != nil {
+		m.events <- &ev
+	}
+	log.Printf("added %s", id)
+}
+
+func (m *mockDockerClient) remove(id string) {
+	m.Lock()
+	defer m.Unlock()
+	r := []dockerclient.APIContainers{}
+	for _, c := range m.containers {
+		if c.ID != id {
+			r = append(r, c)
+		}
+	}
+	m.containers = r
+	ev := dockerclient.APIEvents{Type: "container", ID: id, Status: "stop"}
+	ev.Actor.ID = id
+	if m.events != nil {
+		m.events <- &ev
+	}
+	log.Printf("removed %s", id)
+
+}
+
+func (m *mockDockerClient) ListContainers(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+	m.Lock()
+	defer m.Unlock()
+	return m.containers, nil
+}
+
+func (m *mockDockerClient) AddEventListener(listener chan<- *dockerclient.APIEvents) error {
+	m.Lock()
+	defer m.Unlock()
+	m.events = listener
+	return nil
 }
