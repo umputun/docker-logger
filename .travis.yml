@@ -18,4 +18,5 @@ script:
   - $GOPATH/bin/gometalinter.v2 --disable-all --deadline=300s --vendor --enable=vet --enable=vetshadow --enable=golint \
     --enable=staticcheck --enable=ineffassign --enable=goconst --enable=errcheck --enable=unconvert \
     --enable=deadcode  --enable=gosimple --exclude=test --exclude=mock --exclude=vendor ./...
-  - $GOPATH/bin/goveralls -service=travis-ci
+  - go test -cover -coverprofile=.coverprofile $(go list ./...)
+  - $GOPATH/bin/goveralls -service=travis-ci -show -coverprofile=.coverprofile
