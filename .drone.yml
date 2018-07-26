@@ -12,6 +12,7 @@ pipeline:
       - export GOOS=linux
       - export GOARCH=amd64
       - go build -v ./...
+      - go test ./...
 
   docker_master:
     image: plugins/docker
