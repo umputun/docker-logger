@@ -66,44 +66,44 @@ func main() {
 }
 
 func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *dockerclient.Client) {
-	containerLogs := map[string]logger.LogStreamer{}
+	logStreams := map[string]logger.LogStreamer{}
 
 	procEvent := func(event discovery.Event) {
 
 		if event.Status {
 			// new/started container detected
 			logWriter, errWriter := makeLogWriters(event.ContainerName, event.Group, opts.ExtJSON)
-			ctx, cancel := context.WithCancel(context.Background())
 			ls := logger.LogStreamer{
-				Context:       ctx,
-				CancelFn:      cancel,
 				DockerClient:  client,
 				ContainerID:   event.ContainerID,
 				ContainerName: event.ContainerName,
 				LogWriter:     logWriter,
 				ErrWriter:     errWriter,
 			}
-			containerLogs[event.ContainerID] = ls
-			ls.Go()
+			ls = *ls.Go(ctx)
+			logStreams[event.ContainerID] = ls
+			log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
 			return
 		}
 
 		// removed/stopped container detected
-		ls, ok := containerLogs[event.ContainerID]
+		ls, ok := logStreams[event.ContainerID]
 		if !ok {
 			log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
 			return
 		}
 
 		log.Printf("[DEBUG] close loggers for %+v", event)
-		ls.CancelFn()
+		ls.Close()
+
 		if e := ls.LogWriter.Close(); e != nil {
 			log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
 		}
 		if e := ls.ErrWriter.Close(); e != nil {
 			log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
 		}
-		delete(containerLogs, event.ContainerID)
+		delete(logStreams, event.ContainerID)
+		log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
 	}
 
 	for {
@@ -122,7 +122,7 @@ func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *doc
 func makeLogWriters(containerName string, group string, isExt bool) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s/%s", group, containerName)
 	if !opts.EnableFiles && !opts.EnableSyslog {
-		log.Printf("[ERROR] either files or syslog has to be enabled")
+		log.Fatalf("[ERROR] either files or syslog has to be enabled")
 	}
 
 	logWriters := []io.WriteCloser{} // collect log writers here, for MultiWriter use

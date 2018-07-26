@@ -19,16 +19,17 @@ type LogStreamer struct {
 	LogWriter io.WriteCloser
 	ErrWriter io.WriteCloser
 
-	Context  context.Context
-	CancelFn context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // Go activates streamer
-func (l *LogStreamer) Go() {
+func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 	log.Printf("[INFO] start log streamer for %s", l.ContainerName)
+	l.ctx, l.cancel = context.WithCancel(ctx)
+
 	go func() {
 		logOpts := docker.LogsOptions{
-			Context:           l.Context,
 			Container:         l.ContainerID,
 			OutputStream:      l.LogWriter, // logs writer for stdout
 			ErrorStream:       l.ErrWriter, // err writer for stderr
@@ -37,6 +38,7 @@ func (l *LogStreamer) Go() {
 			Stdout:            true,
 			Stderr:            true,
 			InactivityTimeout: time.Hour * 10000,
+			Context:           l.ctx,
 		}
 
 		var err error
@@ -51,6 +53,18 @@ func (l *LogStreamer) Go() {
 			break
 		}
 
-		log.Printf("[WARN] stream from %s terminated, %v", l.ContainerID, err)
+		if err != nil {
+			log.Printf("[WARN] stream from %s terminated with error %v", l.ContainerID, err)
+			return
+		}
+		log.Printf("[INFO] stream from %s terminated", l.ContainerID)
 	}()
+
+	return l
+}
+
+// Close kills streamer
+func (l *LogStreamer) Close() {
+	l.cancel()
+	<-l.ctx.Done()
 }

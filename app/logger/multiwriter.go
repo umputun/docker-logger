@@ -11,13 +11,13 @@ import (
 )
 
 // MultiWriter implements WriteCloser for multiple destinations.
-// It is simplified version of stdlib MultiWriter. Ignores write error and don't stop the loop.
+// It is simplified version of stdlib MultiWriter. Ignores write error and don't stop the loop unless all writes failed.
 type MultiWriter struct {
 	writers   []io.WriteCloser
 	hostname  string
 	container string
 	group     string
-	isExt     bool
+	isJSON    bool
 }
 
 // jMsg is envelope for ExtJSON mode
@@ -41,7 +41,7 @@ func NewMultiWriterIgnoreErrors(writers ...io.WriteCloser) *MultiWriter {
 func (w *MultiWriter) WithExtJSON(containerName string, group string) *MultiWriter {
 	w.container = containerName
 	w.group = group
-	w.isExt = true
+	w.isJSON = true
 
 	hostname := "unknown"
 	if h, err := os.Hostname(); err == nil {
@@ -54,7 +54,7 @@ func (w *MultiWriter) WithExtJSON(containerName string, group string) *MultiWrit
 // Write to all writers and ignore errors unless they all have errors
 func (w *MultiWriter) Write(p []byte) (n int, err error) {
 	pp := p
-	if w.isExt {
+	if w.isJSON {
 		if pp, err = w.extJSON(p); err != nil {
 			return 0, errors.Wrap(err, "can't convert message to json")
 		}
