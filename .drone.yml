@@ -23,7 +23,7 @@ pipeline:
     when:
       branch: master
       event: push
-      
+
   docker_branch:
     image: plugins/docker
     repo: umputun/docker-logger

@@ -39,7 +39,7 @@ func (l *LogStreamer) Go() {
 		err := l.DockerClient.Logs(logOpts) // this is blocking call. Will run until container up and will publish to streams
 
 		// workaround https://github.com/moby/moby/issues/35370 with empty log, try read log as empty
-		if strings.HasPrefix(err.Error(), "error from daemon in stream: Error grabbing logs: EOF") {
+		if err != nil && strings.HasPrefix(err.Error(), "error from daemon in stream: Error grabbing logs: EOF") {
 			logOpts.Tail = ""
 			err = l.DockerClient.Logs(logOpts)
 		}
