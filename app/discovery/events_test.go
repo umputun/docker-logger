@@ -15,7 +15,8 @@ import (
 
 func TestEvents(t *testing.T) {
 
-	client, err := dockerclient.NewClient("unix:///var/run/docker.sock")
+	dockerHost := os.Getenv("DOCKER_HOST")
+	client, err := dockerclient.NewClient(dockerHost)
 	require.NoError(t, err)
 	events, err := NewEventNotif(client, "tst_exclude")
 	require.NoError(t, err)
@@ -47,7 +48,9 @@ func TestEvents(t *testing.T) {
 func TestEmit(t *testing.T) {
 	ctx := startTestContainer("tst_lg1")
 
-	client, err := dockerclient.NewClient("unix:///var/run/docker.sock")
+	dockerHost := os.Getenv("DOCKER_HOST")
+	client, err := dockerclient.NewClient(dockerHost)
+
 	require.NoError(t, err)
 	events, err := NewEventNotif(client, "tst_exclude")
 	require.NoError(t, err)
