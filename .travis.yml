@@ -1,13 +1,11 @@
 language: go
-sudo: required
 
 go:
-  - "1.10.x"
+  - "1.11.x"
 
 go_import_path: github.com/umputun/docker-logger
 
 before_install:
-  - export DOCKER_HOST='unix:///var/run/docker.sock'
   - go get github.com/mattn/goveralls
   - go get gopkg.in/alecthomas/gometalinter.v2
   - $GOPATH/bin/gometalinter.v2 --install
