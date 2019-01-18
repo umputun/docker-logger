@@ -1,12 +1,12 @@
 package discovery
 
 import (
-	"log"
 	"sync"
 	"testing"
 	"time"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
+	log "github.com/go-pkgz/lgr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

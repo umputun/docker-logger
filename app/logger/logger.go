@@ -3,11 +3,11 @@ package logger
 import (
 	"context"
 	"io"
-	"log"
 	"strings"
 	"time"
 
-	"github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
+	log "github.com/go-pkgz/lgr"
 )
 
 // LogClient wraps DockerClient with the minimal interface

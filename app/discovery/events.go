@@ -1,12 +1,12 @@
 package discovery
 
 import (
-	"log"
 	"regexp"
 	"strings"
 	"time"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
+	log "github.com/go-pkgz/lgr"
 	"github.com/pkg/errors"
 )
 
@@ -94,7 +94,7 @@ func (e *EventNotif) activate(client DockerClient) {
 			e.eventsCh <- event
 		}
 	}
-	log.Fatal("[ERROR] event listener failed")
+	log.Fatalf("[ERROR] event listener failed")
 }
 
 // emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events

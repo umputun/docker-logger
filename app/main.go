@@ -4,16 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"log/syslog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
-	"github.com/hashicorp/logutils"
-	"github.com/jessevdk/go-flags"
-	"gopkg.in/natefinch/lumberjack.v2"
+	log "github.com/go-pkgz/lgr"
+	flags "github.com/jessevdk/go-flags"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
@@ -184,17 +183,9 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 }
 
 func setupLog(dbg bool) {
-	filter := &logutils.LevelFilter{
-		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR"},
-		MinLevel: logutils.LogLevel("INFO"),
-		Writer:   os.Stdout,
-	}
-
-	log.SetFlags(log.Ldate | log.Ltime)
-
 	if dbg {
-		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-		filter.MinLevel = logutils.LogLevel("DEBUG")
+		log.Setup(log.Debug, log.CallerFile, log.Msec, log.LevelBraces)
+		return
 	}
-	log.SetOutput(filter)
+	log.Setup(log.Msec, log.LevelBraces)
 }

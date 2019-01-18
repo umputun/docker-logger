@@ -2,13 +2,12 @@ package logger
 
 import (
 	"context"
-	"log"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	docker "github.com/fsouza/go-dockerclient"
+	log "github.com/go-pkgz/lgr"
+	"github.com/stretchr/testify/assert"
 )
 
 type mockLogClient struct {

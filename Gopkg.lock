@@ -102,6 +102,14 @@
   version = "v1.2.2"
 
 [[projects]]
+  digest = "1:1933dabfb0e07548ed9684fdef857cc6f2413bbbb74ba838a7c1f77407b8fd90"
+  name = "github.com/go-pkgz/lgr"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "8f56fccc1a15dfe9c7f72e049fc87cc378205b97"
+  version = "v0.2.2"
+
+[[projects]]
   digest = "1:fecc1dbffae2bc975f8412a4871f298b3de456dafb3598e87cb2c34137395987"
   name = "github.com/gogo/protobuf"
   packages = ["proto"]
@@ -122,14 +130,6 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "b7773ae218740a7be65057fc60b366a49b538a44"
-
-[[projects]]
-  branch = "master"
-  digest = "1:ce3f7860fd68bd2dd4c3735e2aed8c9de7c7d05bd6ad7d97a6bedcf4fe7b84fb"
-  name = "github.com/hashicorp/logutils"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "0dc08b1671f34c4250ce212759ebd880f743d883"
 
 [[projects]]
   digest = "1:76b0203be9097b0b7f39fdae58653a612996bbbe9b1e1f3998a39ecd473a8f7d"
@@ -236,8 +236,8 @@
   analyzer-version = 1
   input-imports = [
     "github.com/fsouza/go-dockerclient",
+    "github.com/go-pkgz/lgr",
     "github.com/hashicorp/go-multierror",
-    "github.com/hashicorp/logutils",
     "github.com/jessevdk/go-flags",
     "github.com/pkg/errors",
     "github.com/stretchr/testify/assert",
