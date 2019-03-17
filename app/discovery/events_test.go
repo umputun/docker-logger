@@ -82,6 +82,16 @@ func TestEmitIncludes(t *testing.T) {
 	assert.Equal(t, true, ev.Status, "started")
 }
 
+func TestNewEventNotif(t *testing.T) {
+	client := &mockDockerClient{}
+
+	events, err := NewEventNotif(client, nil, nil)
+	require.NoError(t, err)
+	
+	assert.NotNil(t, events.excludes)
+	assert.NotNil(t, events.includes)
+}
+
 func TestIsInFiltersExclude(t *testing.T) {
 	client := &mockDockerClient{}
 	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{})
