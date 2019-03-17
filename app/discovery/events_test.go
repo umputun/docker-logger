@@ -14,7 +14,7 @@ import (
 func TestEvents(t *testing.T) {
 
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, "tst_exclude")
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{})
 	require.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 	go client.add("id1", "name1")
@@ -29,6 +29,23 @@ func TestEvents(t *testing.T) {
 	assert.Equal(t, false, ev.Status, "stopped")
 }
 
+func TestEventsIncludes(t *testing.T) {
+	client := &mockDockerClient{}
+	events, err := NewEventNotif(client, []string{}, []string{"tst_included"})
+	require.NoError(t, err)
+	time.Sleep(10 * time.Millisecond)
+	go client.add("id2", "tst_included")
+
+	ev := <-events.Channel()
+	assert.Equal(t, "tst_included", ev.ContainerName)
+	assert.Equal(t, true, ev.Status, "started")
+
+	go client.remove("id2")
+	ev = <-events.Channel()
+	assert.Equal(t, "id2", ev.ContainerID)
+	assert.Equal(t, false, ev.Status, "stopped")
+}
+
 func TestEmit(t *testing.T) {
 	client := &mockDockerClient{}
 	time.Sleep(10 * time.Millisecond)
@@ -37,7 +54,7 @@ func TestEmit(t *testing.T) {
 	client.add("id2", "tst_exclude")
 	client.add("id2", "name2")
 
-	events, err := NewEventNotif(client, "tst_exclude")
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{})
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
@@ -47,6 +64,41 @@ func TestEmit(t *testing.T) {
 	ev = <-events.Channel()
 	assert.Equal(t, "name2", ev.ContainerName)
 	assert.Equal(t, true, ev.Status, "started")
+}
+
+func TestEmitIncludes(t *testing.T) {
+	client := &mockDockerClient{}
+	time.Sleep(10 * time.Millisecond)
+
+	client.add("id1", "name1")
+	client.add("id2", "tst_include")
+	client.add("id2", "name2")
+
+	events, err := NewEventNotif(client, []string{}, []string{"tst_include"})
+	require.NoError(t, err)
+
+	ev := <-events.Channel()
+	assert.Equal(t, "tst_include", ev.ContainerName)
+	assert.Equal(t, true, ev.Status, "started")
+}
+
+func TestIsInFiltersExclude(t *testing.T) {
+	client := &mockDockerClient{}
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{})
+	require.NoError(t, err)
+
+	assert.True(t, events.isInFilters("name1"))
+	assert.False(t, events.isInFilters("tst_exclude"))
+}
+
+func TestIsInFiltersInclude(t *testing.T) {
+	client := &mockDockerClient{}
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{"tst_include"})
+	require.NoError(t, err)
+
+	assert.True(t, events.isInFilters("tst_include"))
+	assert.False(t, events.isInFilters("name1"))
+	assert.False(t, events.isInFilters("tst_exclude"))
 }
 
 func TestGroup(t *testing.T) {
@@ -102,6 +154,9 @@ func (m *mockDockerClient) add(id string, name string) {
 func (m *mockDockerClient) remove(id string) {
 	m.Lock()
 	defer m.Unlock()
+
+	removingContainerName := m.getContainerName(id)
+
 	r := []dockerclient.APIContainers{}
 	for _, c := range m.containers {
 		if c.ID != id {
@@ -109,7 +164,9 @@ func (m *mockDockerClient) remove(id string) {
 		}
 	}
 	m.containers = r
-	ev := dockerclient.APIEvents{Type: "container", ID: id, Status: "stop"}
+
+	actor := dockerclient.APIActor{ID: id, Attributes: map[string]string{"name": removingContainerName}}
+	ev := dockerclient.APIEvents{Type: "container", ID: id, Status: "stop", Actor: actor}
 	ev.Actor.ID = id
 	if m.events != nil {
 		m.events <- &ev
@@ -129,4 +186,14 @@ func (m *mockDockerClient) AddEventListener(listener chan<- *dockerclient.APIEve
 	defer m.Unlock()
 	m.events = listener
 	return nil
+}
+
+func (m *mockDockerClient) getContainerName(id string) string {
+	for _, c := range m.containers {
+		if id == c.ID {
+			return c.Names[0]
+		}
+	}
+
+	panic("Can't find container with specified id")
 }
