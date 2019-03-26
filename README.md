@@ -29,6 +29,7 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 
 - at least one of destinations (`files` or `syslog`) should be allowed
 - location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)
+- both `--exclude` and `--include` flags are optional and mutually exclusive, i.e. if `--exclude` defined `--include` not allowed, and vise versa.
 
 ## Build from the source
 
