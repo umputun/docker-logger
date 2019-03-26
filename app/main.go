@@ -43,6 +43,10 @@ func main() {
 
 	log.Printf("[INFO] options: %+v", opts)
 
+	if opts.Includes != nil && opts.Excludes != nil {
+		log.Fatalf("[ERROR] only single option Excludes/Includes are allowed")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { // catch signal and invoke graceful termination
 		stop := make(chan os.Signal, 1)

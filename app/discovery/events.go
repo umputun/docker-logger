@@ -87,7 +87,7 @@ func (e *EventNotif) activate(client DockerClient) {
 			log.Printf("[DEBUG] api event %+v", dockerEvent)
 			containerName := strings.TrimPrefix(dockerEvent.Actor.Attributes["name"], "/")
 
-			if !e.isInFilters(containerName) {
+			if !e.isAllowed(containerName) {
 				log.Printf("[INFO] container %s excluded", containerName)
 				continue
 			}
@@ -117,7 +117,7 @@ func (e *EventNotif) emitRunningContainers() error {
 
 	for _, c := range containers {
 		containerName := strings.TrimPrefix(c.Names[0], "/")
-		if !e.isInFilters(containerName) {
+		if !e.isAllowed(containerName) {
 			log.Printf("[INFO] container %s excluded", containerName)
 			continue
 		}
@@ -143,12 +143,12 @@ func (e *EventNotif) group(image string) string {
 	return ""
 }
 
-func (e *EventNotif) isInFilters(containerName string) bool {
-	if contains(containerName, e.excludes) {
-		return false
-	}
+func (e *EventNotif) isAllowed(containerName string) bool {
 	if len(e.includes) > 0 {
 		return contains(containerName, e.includes)
+	}
+	if contains(containerName, e.excludes) {
+		return false
 	}
 
 	return true

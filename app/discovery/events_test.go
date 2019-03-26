@@ -92,23 +92,23 @@ func TestNewEventNotif(t *testing.T) {
 	assert.NotNil(t, events.includes)
 }
 
-func TestIsInFiltersExclude(t *testing.T) {
+func TestIsAllowedExclude(t *testing.T) {
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{})
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, nil)
 	require.NoError(t, err)
 
-	assert.True(t, events.isInFilters("name1"))
-	assert.False(t, events.isInFilters("tst_exclude"))
+	assert.True(t, events.isAllowed("name1"))
+	assert.False(t, events.isAllowed("tst_exclude"))
 }
 
-func TestIsInFiltersInclude(t *testing.T) {
+func TestIsAllowedInclude(t *testing.T) {
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{"tst_include"})
+	events, err := NewEventNotif(client, nil, []string{"tst_include"})
 	require.NoError(t, err)
 
-	assert.True(t, events.isInFilters("tst_include"))
-	assert.False(t, events.isInFilters("name1"))
-	assert.False(t, events.isInFilters("tst_exclude"))
+	assert.True(t, events.isAllowed("tst_include"))
+	assert.False(t, events.isAllowed("name1"))
+	assert.False(t, events.isAllowed("tst_exclude"))
 }
 
 func TestGroup(t *testing.T) {
