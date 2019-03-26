@@ -14,6 +14,7 @@ import (
 type EventNotif struct {
 	dockerClient DockerClient
 	excludes     []string
+	includes     []string
 	eventsCh     chan Event
 }
 
@@ -35,11 +36,12 @@ type DockerClient interface {
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient DockerClient, excludes ...string) (*EventNotif, error) {
-	log.Printf("[DEBUG] create events notif, excludes: %+v", excludes)
+func NewEventNotif(dockerClient DockerClient, excludes, includes []string) (*EventNotif, error) {
+	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v", excludes, includes)
 	res := EventNotif{
 		dockerClient: dockerClient,
 		excludes:     excludes,
+		includes:     includes,
 		eventsCh:     make(chan Event, 100),
 	}
 	go func() {
@@ -78,7 +80,8 @@ func (e *EventNotif) activate(client DockerClient) {
 
 			log.Printf("[DEBUG] api event %+v", dockerEvent)
 			containerName := strings.TrimPrefix(dockerEvent.Actor.Attributes["name"], "/")
-			if contains(containerName, e.excludes) {
+
+			if !e.isAllowed(containerName) {
 				log.Printf("[INFO] container %s excluded", containerName)
 				continue
 			}
@@ -108,7 +111,7 @@ func (e *EventNotif) emitRunningContainers() error {
 
 	for _, c := range containers {
 		containerName := strings.TrimPrefix(c.Names[0], "/")
-		if contains(containerName, e.excludes) {
+		if !e.isAllowed(containerName) {
 			log.Printf("[INFO] container %s excluded", containerName)
 			continue
 		}
@@ -132,6 +135,17 @@ func (e *EventNotif) group(image string) string {
 	}
 	log.Printf("[DEBUG] no group for %s", image)
 	return ""
+}
+
+func (e *EventNotif) isAllowed(containerName string) bool {
+	if len(e.includes) > 0 {
+		return contains(containerName, e.includes)
+	}
+	if contains(containerName, e.excludes) {
+		return false
+	}
+
+	return true
 }
 
 func contains(e string, s []string) bool {

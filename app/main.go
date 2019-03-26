@@ -27,6 +27,7 @@ var opts struct {
 	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
 	MaxFilesAge   int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
 	Excludes      []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
+	Includes      []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
 	ExtJSON       bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
 	Dbg           bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
@@ -42,6 +43,10 @@ func main() {
 
 	log.Printf("[INFO] options: %+v", opts)
 
+	if opts.Includes != nil && opts.Excludes != nil {
+		log.Fatalf("[ERROR] only single option Excludes/Includes are allowed")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { // catch signal and invoke graceful termination
 		stop := make(chan os.Signal, 1)
@@ -56,7 +61,7 @@ func main() {
 		log.Fatalf("[ERROR] failed to make docker client %s, %v", opts.DockerHost, err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes...)
+	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes)
 	if err != nil {
 		log.Fatalf("[ERROR] failed to make event notifier, %v", err)
 	}
