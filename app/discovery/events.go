@@ -37,12 +37,6 @@ var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
 func NewEventNotif(dockerClient DockerClient, excludes, includes []string) (*EventNotif, error) {
-	if excludes == nil {
-		excludes = []string{}
-	}
-	if includes == nil {
-		includes = []string{}
-	}
 	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v", excludes, includes)
 	res := EventNotif{
 		dockerClient: dockerClient,

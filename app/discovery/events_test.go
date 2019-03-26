@@ -82,14 +82,11 @@ func TestEmitIncludes(t *testing.T) {
 	assert.Equal(t, true, ev.Status, "started")
 }
 
-func TestNewEventNotif(t *testing.T) {
+func TestNewEventNotifWithNils(t *testing.T) {
 	client := &mockDockerClient{}
 
-	events, err := NewEventNotif(client, nil, nil)
+	_, err := NewEventNotif(client, nil, nil)
 	require.NoError(t, err)
-	
-	assert.NotNil(t, events.excludes)
-	assert.NotNil(t, events.includes)
 }
 
 func TestIsAllowedExclude(t *testing.T) {
