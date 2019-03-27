@@ -6,7 +6,7 @@ It can forward both stdout and stderr of containers to local, rotated files and/
 
 ## Install
 
-Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run it with `docker-compose up -d`. By default `docker-logger` will collect all logs from containers and put it to `./logs` directory.
+Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run with `docker-compose up -d`. By default `docker-logger` will collect all logs from containers and put it to `./logs` directory.
 
 ## Customization
 

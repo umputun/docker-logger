@@ -1,7 +1,8 @@
 version: '2'
 
 services:
-    remark:
+    logger:
+        build: .
         image: umputun/docker-logger
         container_name: "logger"
         hostname: "logger"

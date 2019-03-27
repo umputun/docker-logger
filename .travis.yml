@@ -1,20 +1,20 @@
-language: go
-
-go:
-  - "1.11.x"
-
-go_import_path: github.com/umputun/docker-logger
-
-before_install:
-  - go get github.com/mattn/goveralls
-  - go get gopkg.in/alecthomas/gometalinter.v2
-  - $GOPATH/bin/gometalinter.v2 --install
+install:
+  - docker --version
+  - docker-compose --version
 
 script:
-  - cd app
-  - go test ./...
-  - $GOPATH/bin/gometalinter.v2 --disable-all --deadline=300s --vendor --enable=vet --enable=vetshadow --enable=golint \
-    --enable=staticcheck --enable=ineffassign --enable=goconst --enable=errcheck --enable=unconvert \
-    --enable=deadcode  --enable=gosimple --exclude=test --exclude=mock --exclude=vendor ./...
-  - go test -cover -coverprofile=.coverprofile $(go list ./...)
-  - $GOPATH/bin/goveralls -service=travis-ci -show -coverprofile=.coverprofile
+  - docker build
+    --build-arg COVERALLS_TOKEN=$COVERALLS_TOKEN
+    --build-arg CI=$CI
+    --build-arg TRAVIS=$TRAVIS
+    --build-arg TRAVIS_BRANCH=$TRAVIS_BRANCH
+    --build-arg TRAVIS_COMMIT=$TRAVIS_COMMIT
+    --build-arg TRAVIS_JOB_ID=$TRAVIS_JOB_ID
+    --build-arg TRAVIS_JOB_NUMBER=$TRAVIS_JOB_NUMBER
+    --build-arg TRAVIS_OS_NAME=$TRAVIS_OS_NAME
+    --build-arg TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST
+    --build-arg TRAVIS_PULL_REQUEST_SHA=$TRAVIS_PULL_REQUEST_SHA
+    --build-arg TRAVIS_REPO_SLUG=$TRAVIS_REPO_SLUG
+    --build-arg TRAVIS_TAG=$TRAVIS_TAG
+    .
+

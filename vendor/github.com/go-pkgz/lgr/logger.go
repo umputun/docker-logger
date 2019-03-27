@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -14,15 +15,19 @@ var levels = []string{"DEBUG", "INFO", "WARN", "ERROR", "PANIC", "FATAL"}
 
 // Logger provided simple logger with basic support of levels. Thread safe
 type Logger struct {
-	stdout, stderr         io.Writer
-	dbg                    bool
-	lock                   sync.Mutex
-	callerFile, callerFunc bool
-	now                    nowFn
-	fatal                  panicFn
-	skipCallers            int
-	levelBraces            bool
-	msec                   bool
+	stdout, stderr    io.Writer
+	dbg               bool
+	lock              sync.Mutex
+	callerFile        bool
+	callerFunc        bool
+	callerPkg         bool
+	callerSkip        int
+	ignoredPkgCallers []string
+
+	now         nowFn
+	fatal       panicFn
+	levelBraces bool
+	msec        bool
 }
 
 type nowFn func() time.Time
@@ -32,11 +37,11 @@ type panicFn func()
 // Two writers can be passed optionally - first for out and second for err
 func New(options ...Option) *Logger {
 	res := Logger{
-		now:         time.Now,
-		fatal:       func() { os.Exit(1) },
-		stdout:      os.Stdout,
-		stderr:      os.Stderr,
-		skipCallers: 1,
+		now:        time.Now,
+		fatal:      func() { os.Exit(1) },
+		stdout:     os.Stdout,
+		stderr:     os.Stderr,
+		callerSkip: 1,
 	}
 	for _, opt := range options {
 		opt(&res)
@@ -67,18 +72,27 @@ func (l *Logger) Logf(format string, args ...interface{}) {
 	bld.WriteString(l.formatLevel(lv))
 	bld.WriteString(" ")
 
-	if l.dbg && (l.callerFile || l.callerFunc) {
-		if pc, file, line, ok := runtime.Caller(l.skipCallers); ok {
+	if l.callerFile || l.callerFunc || l.callerPkg {
+		if pc, file, line, ok := runtime.Caller(l.callerSkip); ok {
 
-			funcName := ""
+			funcName, fileInfo := "", ""
+
 			if l.callerFunc {
 				funcNameElems := strings.Split(runtime.FuncForPC(pc).Name(), "/")
 				funcName = funcNameElems[len(funcNameElems)-1]
 			}
-			fileInfo := ""
+
 			if l.callerFile {
 				fnameElems := strings.Split(file, "/")
 				fileInfo = fmt.Sprintf("%s:%d", strings.Join(fnameElems[len(fnameElems)-2:], "/"), line)
+				if l.callerFunc {
+					fileInfo += " "
+				}
+			}
+			// callerPkg only if no other callers
+			if l.callerPkg && !l.callerFile && !l.callerFunc {
+				file = l.ignoreCaller(file)
+				_, fileInfo = path.Split(path.Dir(file))
 				if l.callerFunc {
 					fileInfo += " "
 				}
@@ -106,6 +120,15 @@ func (l *Logger) Logf(format string, args ...interface{}) {
 	}
 
 	l.lock.Unlock()
+}
+
+func (l *Logger) ignoreCaller(p string) string {
+	for _, s := range l.ignoredPkgCallers {
+		if strings.Contains(p, "/"+s+"/") {
+			return strings.Replace(p, "/"+s, "", 1)
+		}
+	}
+	return p
 }
 
 func (l *Logger) formatLevel(lv string) string {
@@ -181,6 +204,26 @@ func CallerFile(l *Logger) {
 // CallerFunc adds caller info with function name
 func CallerFunc(l *Logger) {
 	l.callerFunc = true
+}
+
+// CallerPkg adds caller's package name
+func CallerPkg(l *Logger) {
+	l.callerPkg = true
+}
+
+// CallerIgnore sets packages skipped from logging caller
+func CallerIgnore(ignores ...string) Option {
+	return func(l *Logger) {
+		l.ignoredPkgCallers = ignores
+	}
+}
+
+// CallerSkip sets how many trace levels to skip.
+// by default this value is 1 , i.e. skip logger level only
+func CallerSkip(n int) Option {
+	return func(l *Logger) {
+		l.callerSkip = n
+	}
 }
 
 // LevelBraces adds [] to level

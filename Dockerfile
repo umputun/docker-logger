@@ -1,22 +1,40 @@
 FROM umputun/baseimage:buildgo-latest as build
 
-ADD . /go/src/github.com/umputun/docker-logger
-WORKDIR /go/src/github.com/umputun/docker-logger
+ARG CI
+ARG COVERALLS_TOKEN
+ARG TRAVIS
+ARG TRAVIS_BRANCH
+ARG TRAVIS_COMMIT
+ARG TRAVIS_JOB_ID
+ARG TRAVIS_JOB_NUMBER
+ARG TRAVIS_OS_NAME
+ARG TRAVIS_PULL_REQUEST
+ARG TRAVIS_PULL_REQUEST_SHA
+ARG TRAVIS_REPO_SLUG
+ARG TRAVIS_TAG
 
-RUN cd app && go test -v $(go list -e ./... | grep -v vendor)
+ADD . /build/docker-logger
+WORKDIR /build/docker-logger
 
-RUN gometalinter --disable-all --deadline=300s --vendor --enable=vet --enable=vetshadow --enable=golint \
-    --enable=staticcheck --enable=ineffassign --enable=goconst --enable=errcheck --enable=unconvert \
-    --enable=deadcode  --enable=gosimple --exclude=test --exclude=mock --exclude=vendor ./...
+RUN cd app && go test -v -mod=vendor -covermode=count -coverprofile=/profile.cov ./...
 
-RUN go build -o docker-logger -ldflags "-X main.revision=$(git rev-parse --abbrev-ref HEAD)-$(git describe --abbrev=7 --always --tags)-$(date +%Y%m%d-%H:%M:%S) -s -w" ./app
+RUN golangci-lint run --out-format=tab --disable-all --tests=false --enable=unconvert \
+    --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
+    --enable=unparam --enable=varcheck --enable=deadcode --enable=typecheck \
+    --enable=ineffassign --enable=varcheck ./...
 
+RUN \
+    revison=$(/script/git-rev.sh) && \
+    echo "revision=${revison}" && \
+    go build -mod=vendor -o docker-logger -ldflags "-X main.revision=$revison -s -w" ./app
 
-FROM alpine:3.7
+# submit coverage to coverals if COVERALLS_TOKEN in env
+RUN if [ -z "$COVERALLS_TOKEN" ] ; then echo "coverall not enabled" ; \
+    else goveralls -coverprofile=/profile.cov -service=travis-ci -repotoken $COVERALLS_TOKEN || echo "coverall failed!"; fi
 
-RUN apk add --update --no-cache tzdata
+FROM umputun/baseimage:app-latest
 
-COPY --from=build /go/src/github.com/umputun/docker-logger/docker-logger /srv/
+COPY --from=build /build/docker-logger /srv/
 COPY init.sh /init.sh
 RUN chmod +x /init.sh
 
