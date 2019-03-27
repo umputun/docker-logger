@@ -17,3 +17,4 @@ script:
     --build-arg TRAVIS_REPO_SLUG=$TRAVIS_REPO_SLUG
     --build-arg TRAVIS_TAG=$TRAVIS_TAG
     .
+
