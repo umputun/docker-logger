@@ -109,7 +109,7 @@ func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *doc
 			log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
 		}
 
-		if !opts.MixErr { // don't close err writer if mixed mode, closed already by LogWriter.Close()
+		if !opts.MixErr { // don't close err writer in mixed mode, closed already by LogWriter.Close()
 			if e := ls.ErrWriter.Close(); e != nil {
 				log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
 			}
@@ -163,7 +163,7 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 		errFileWriter := logFileWriter
 		errFname := logName
 
-		if !opts.MixErr { // if writers not mixed make separate std and err
+		if !opts.MixErr { // if writers not mixed make error writer
 			errFname = fmt.Sprintf("%s/%s.err", logDir, containerName)
 			errFileWriter = &lumberjack.Logger{
 				Filename:   errFname,

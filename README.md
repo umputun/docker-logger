@@ -20,6 +20,7 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 | `--syslog`      | `LOG_SYSLOG`  | No                          | enable logging to syslog                       |
 | `--max-size`    | `MAX_SIZE`    | 10                          | size of log triggering rotation (MB)           |
 | `--max-files`   | `MAX_FILES`   | 5                           | number of rotated files to retain              |
+| `--mix-err`     | `MIX_ERR`     | false                       | send error to std output log file
 | `--max-age`     | `MAX_AGE`     | 30                          | maximum number of days to retain               |
 | `--exclude`     | `EXCLUDE`     |                             | excluded container names, comma separated      |
 | `--include`     | `INCLUDE`     |                             | only included container names, comma separated |
