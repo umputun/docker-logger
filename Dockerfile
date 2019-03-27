@@ -16,7 +16,7 @@ ARG TRAVIS_TAG
 ADD . /build/docker-logger
 WORKDIR /build/docker-logger
 
-RUN cd app && go test -v -mod=vendor ./...
+RUN cd app && go test -v -mod=vendor -covermode=count -coverprofile=/profile.cov ./...
 
 RUN golangci-lint run --out-format=tab --disable-all --tests=false --enable=unconvert \
     --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
@@ -30,7 +30,7 @@ RUN \
 
 # submit coverage to coverals if COVERALLS_TOKEN in env
 RUN if [ -z "$COVERALLS_TOKEN" ] ; then echo "coverall not enabled" ; \
-    else goveralls -coverprofile=profile.cov -service=travis-ci -repotoken $COVERALLS_TOKEN || echo "coverall failed!"; fi
+    else goveralls -coverprofile=/profile.cov -service=travis-ci -repotoken $COVERALLS_TOKEN || echo "coverall failed!"; fi
 
 FROM umputun/baseimage:app-latest
 
