@@ -1,24 +1,19 @@
-language: go
-
-go:
-  - "1.12.x"
-
-env:
-  - GO111MODULE=on
-
-install: true
-
-
-before_install:
-  - export TZ=America/Chicago
-  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.13.2
-  - go get github.com/mattn/goveralls
-  - export PATH=$(pwd)/bin:$PATH
+install:
+  - docker --version
+  - docker-compose --version
 
 script:
-  - go test -mod=vendor -covermode=count -coverprofile=profile.cov ./...
-  - golangci-lint run --out-format=tab --disable-all --tests=false --enable=unconvert \
-    --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
-    --enable=unparam --enable=varcheck --enable=deadcode --enable=typecheck \
-    --enable=ineffassign --enable=varcheck ./...
-  - $GOPATH/bin/goveralls -service=travis-ci -coverprofile=profile.cov
+  - docker build
+    --build-arg COVERALLS_TOKEN=$COVERALLS_TOKEN
+    --build-arg CI=$CI
+    --build-arg TRAVIS=$TRAVIS
+    --build-arg TRAVIS_BRANCH=$TRAVIS_BRANCH
+    --build-arg TRAVIS_COMMIT=$TRAVIS_COMMIT
+    --build-arg TRAVIS_JOB_ID=$TRAVIS_JOB_ID
+    --build-arg TRAVIS_JOB_NUMBER=$TRAVIS_JOB_NUMBER
+    --build-arg TRAVIS_OS_NAME=$TRAVIS_OS_NAME
+    --build-arg TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST
+    --build-arg TRAVIS_PULL_REQUEST_SHA=$TRAVIS_PULL_REQUEST_SHA
+    --build-arg TRAVIS_REPO_SLUG=$TRAVIS_REPO_SLUG
+    --build-arg TRAVIS_TAG=$TRAVIS_TAG
+    .

@@ -15,6 +15,9 @@ RUN \
     echo "revision=${revison}" && \
     go build -mod=vendor -o docker-logger -ldflags "-X main.revision=$revison -s -w" ./app
 
+# submit coverage to coverals if COVERALLS_TOKEN in env
+RUN if [ -z "$COVERALLS_TOKEN" ] ; then echo "coverall not enabled" ; \
+    else goveralls -coverprofile=profile.cov -service=travis-ci -repotoken $COVERALLS_TOKEN || echo "coverall failed!"; fi
 
 FROM umputun/baseimage:app-latest
 
