@@ -1,20 +1,25 @@
 language: go
 
 go:
-  - "1.11.x"
+  - "1.12.x"
 
-go_import_path: github.com/umputun/docker-logger
+env:
+  - GO111MODULE=on
+
+install: true
+
 
 before_install:
+  - export TZ=America/Chicago
+  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.13.2
   - go get github.com/mattn/goveralls
-  - go get gopkg.in/alecthomas/gometalinter.v2
-  - $GOPATH/bin/gometalinter.v2 --install
+  - export PATH=$(pwd)/bin:$PATH
 
 script:
   - cd app
-  - go test ./...
-  - $GOPATH/bin/gometalinter.v2 --disable-all --deadline=300s --vendor --enable=vet --enable=vetshadow --enable=golint \
-    --enable=staticcheck --enable=ineffassign --enable=goconst --enable=errcheck --enable=unconvert \
-    --enable=deadcode  --enable=gosimple --exclude=test --exclude=mock --exclude=vendor ./...
-  - go test -cover -coverprofile=.coverprofile $(go list ./...)
-  - $GOPATH/bin/goveralls -service=travis-ci -show -coverprofile=.coverprofile
+  - go test -mod=vendor -covermode=count -coverprofile=/profile.cov ./...
+  - golangci-lint run --out-format=tab --disable-all --tests=false --enable=unconvert \
+    --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
+    --enable=unparam --enable=varcheck --enable=deadcode --enable=typecheck \
+    --enable=ineffassign --enable=varcheck ./...
+  - $GOPATH/bin/goveralls -service=travis-ci -show -coverprofile=/profile.cov

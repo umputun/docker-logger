@@ -42,19 +42,19 @@ func getInodeFromStat(stat interface{}) (inode uint64, err error) {
 	s, ok := stat.(*syscall.Stat_t)
 
 	if ok {
-		inode = uint64(s.Ino)
+		inode = s.Ino
 	}
 
 	return
 }
 
-func getFileUIDGID(stat interface{}) (idtools.IDPair, error) {
+func getFileIdentity(stat interface{}) (idtools.Identity, error) {
 	s, ok := stat.(*syscall.Stat_t)
 
 	if !ok {
-		return idtools.IDPair{}, errors.New("cannot convert stat value to syscall.Stat_t")
+		return idtools.Identity{}, errors.New("cannot convert stat value to syscall.Stat_t")
 	}
-	return idtools.IDPair{UID: int(s.Uid), GID: int(s.Gid)}, nil
+	return idtools.Identity{UID: int(s.Uid), GID: int(s.Gid)}, nil
 }
 
 func chmodTarEntry(perm os.FileMode) os.FileMode {

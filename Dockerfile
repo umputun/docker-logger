@@ -1,22 +1,24 @@
 FROM umputun/baseimage:buildgo-latest as build
 
-ADD . /go/src/github.com/umputun/docker-logger
-WORKDIR /go/src/github.com/umputun/docker-logger
+ADD . /build/docker-logger
+WORKDIR /build/docker-logger
 
-RUN cd app && go test -v $(go list -e ./... | grep -v vendor)
+RUN cd app && go test -v -mod=vendor ./...
 
-RUN gometalinter --disable-all --deadline=300s --vendor --enable=vet --enable=vetshadow --enable=golint \
-    --enable=staticcheck --enable=ineffassign --enable=goconst --enable=errcheck --enable=unconvert \
-    --enable=deadcode  --enable=gosimple --exclude=test --exclude=mock --exclude=vendor ./...
+RUN golangci-lint run --out-format=tab --disable-all --tests=false --enable=unconvert \
+    --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
+    --enable=unparam --enable=varcheck --enable=deadcode --enable=typecheck \
+    --enable=ineffassign --enable=varcheck ./...
 
-RUN go build -o docker-logger -ldflags "-X main.revision=$(git rev-parse --abbrev-ref HEAD)-$(git describe --abbrev=7 --always --tags)-$(date +%Y%m%d-%H:%M:%S) -s -w" ./app
+RUN \
+    revison=$(/script/git-rev.sh) && \
+    echo "revision=${revison}" && \
+    go build -mod=vendor -o docker-logger -ldflags "-X main.revision=$revison -s -w" ./app
 
 
-FROM alpine:3.7
+FROM umputun/baseimage:app-latest
 
-RUN apk add --update --no-cache tzdata
-
-COPY --from=build /go/src/github.com/umputun/docker-logger/docker-logger /srv/
+COPY --from=build /build/docker-logger /srv/
 COPY init.sh /init.sh
 RUN chmod +x /init.sh
 

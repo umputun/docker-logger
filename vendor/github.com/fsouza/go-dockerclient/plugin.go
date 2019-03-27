@@ -40,10 +40,10 @@ func (c *Client) InstallPlugins(opts InstallPluginOptions) error {
 		data:    opts.Plugins,
 		context: opts.Context,
 	})
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
+	resp.Body.Close()
 	return nil
 }
 
@@ -143,7 +143,7 @@ type PluginDetail struct {
 	ID       string         `json:"Id,omitempty" yaml:"Id,omitempty" toml:"Id,omitempty"`
 	Name     string         `json:"Name,omitempty" yaml:"Name,omitempty" toml:"Name,omitempty"`
 	Tag      string         `json:"Tag,omitempty" yaml:"Tag,omitempty" toml:"Tag,omitempty"`
-	Active   bool           `json:"Active,omitempty" yaml:"Active,omitempty" toml:"Active,omitempty"`
+	Active   bool           `json:"Enabled,omitempty" yaml:"Active,omitempty" toml:"Active,omitempty"`
 	Settings PluginSettings `json:"Settings,omitempty" yaml:"Settings,omitempty" toml:"Settings,omitempty"`
 	Config   PluginConfig   `json:"Config,omitempty" yaml:"Config,omitempty" toml:"Config,omitempty"`
 }
@@ -288,7 +288,6 @@ type EnablePluginOptions struct {
 func (c *Client) EnablePlugin(opts EnablePluginOptions) error {
 	path := "/plugins/" + opts.Name + "/enable?" + queryString(opts)
 	resp, err := c.do("POST", path, doOptions{context: opts.Context})
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
@@ -312,7 +311,6 @@ type DisablePluginOptions struct {
 func (c *Client) DisablePlugin(opts DisablePluginOptions) error {
 	path := "/plugins/" + opts.Name + "/disable"
 	resp, err := c.do("POST", path, doOptions{context: opts.Context})
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
@@ -340,10 +338,10 @@ func (c *Client) CreatePlugin(opts CreatePluginOptions) (string, error) {
 	resp, err := c.do("POST", path, doOptions{
 		data:    opts.Path,
 		context: opts.Context})
-	defer resp.Body.Close()
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 	containerNameBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
@@ -367,10 +365,10 @@ type PushPluginOptions struct {
 func (c *Client) PushPlugin(opts PushPluginOptions) error {
 	path := "/plugins/" + opts.Name + "/push"
 	resp, err := c.do("POST", path, doOptions{context: opts.Context})
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
+	resp.Body.Close()
 	return nil
 }
 
@@ -394,13 +392,13 @@ func (c *Client) ConfigurePlugin(opts ConfigurePluginOptions) error {
 		data:    opts.Envs,
 		context: opts.Context,
 	})
-	defer resp.Body.Close()
 	if err != nil {
 		if e, ok := err.(*Error); ok && e.Status == http.StatusNotFound {
 			return &NoSuchPlugin{ID: opts.Name}
 		}
 		return err
 	}
+	resp.Body.Close()
 	return nil
 }
 
