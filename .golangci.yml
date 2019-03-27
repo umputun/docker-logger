@@ -12,10 +12,6 @@ linters-settings:
   goconst:
     min-len: 2
     min-occurrences: 2
-  depguard:
-    list-type: blacklist
-    packages:
-      - github.com/sirupsen/logrus
   misspell:
     locale: US
   lll:
@@ -28,6 +24,27 @@ linters-settings:
     disabled-checks:
       - wrapperFunc
 
+linters:
+  disable-all: true
+  enable:
+    - megacheck
+    - govet
+    - unconvert
+    - megacheck
+    - structcheck
+    - gas
+    - gocyclo
+    - dupl
+    - misspell
+    - unparam
+    - varcheck
+    - deadcode
+    - typecheck
+    - ineffassign
+    - varcheck
+  fast: false
+
+
 run:
   modules-download-mode: vendor
   skip-dirs:
@@ -38,3 +55,6 @@ issues:
     - text: "weak cryptographic primitive"
       linters:
         - gosec
+
+service:
+  golangci-lint-version: 1.15.x

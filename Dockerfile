@@ -18,10 +18,7 @@ WORKDIR /build/docker-logger
 
 RUN cd app && go test -v -mod=vendor -covermode=count -coverprofile=/profile.cov ./...
 
-RUN golangci-lint run --out-format=tab --disable-all --tests=false --enable=unconvert \
-    --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
-    --enable=unparam --enable=varcheck --enable=deadcode --enable=typecheck \
-    --enable=ineffassign --enable=varcheck ./...
+RUN golangci-lint run --out-format=tab --tests=false ./...
 
 RUN \
     revison=$(/script/git-rev.sh) && \
