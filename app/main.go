@@ -11,25 +11,30 @@ import (
 
 	dockerclient "github.com/fsouza/go-dockerclient"
 	log "github.com/go-pkgz/lgr"
-	flags "github.com/jessevdk/go-flags"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"github.com/jessevdk/go-flags"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
 )
 
 var opts struct {
-	DockerHost    string   `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
-	SyslogHost    string   `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
-	EnableFiles   bool     `long:"files" env:"LOG_FILES" description:"enable logging to files"`
-	EnableSyslog  bool     `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
-	MaxFileSize   int      `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
-	MaxFilesCount int      `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
-	MaxFilesAge   int      `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
-	Excludes      []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
-	Includes      []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
-	ExtJSON       bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
-	Dbg           bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
+	DockerHost string `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
+
+	EnableSyslog bool   `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
+	SyslogHost   string `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
+	SyslogPrefix string `long:"syslog-prefix" env:"SYSLOG_PREFIX" default:"docker/" description:"syslog prefix"`
+
+	EnableFiles   bool `long:"files" env:"LOG_FILES" description:"enable logging to files"`
+	MaxFileSize   int  `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
+	MaxFilesCount int  `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
+	MaxFilesAge   int  `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
+	MixErr        bool `long:"mix-err" env:"MIX_ERR" description:"send error to std output log file"`
+
+	Excludes []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
+	Includes []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
+	ExtJSON  bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
+	Dbg      bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
 var revision = "unknown"
@@ -103,8 +108,11 @@ func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *doc
 		if e := ls.LogWriter.Close(); e != nil {
 			log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
 		}
-		if e := ls.ErrWriter.Close(); e != nil {
-			log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
+
+		if !opts.MixErr { // don't close err writer if mixed mode, closed already by LogWriter.Close()
+			if e := ls.ErrWriter.Close(); e != nil {
+				log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
+			}
 		}
 		delete(logStreams, event.ContainerID)
 		log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
@@ -129,8 +137,8 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 		log.Fatalf("[ERROR] either files or syslog has to be enabled")
 	}
 
-	logWriters := []io.WriteCloser{} // collect log writers here, for MultiWriter use
-	errWriters := []io.WriteCloser{} // collect err writers here, for MultiWriter use
+	var logWriters []io.WriteCloser // collect log writers here, for MultiWriter use
+	var errWriters []io.WriteCloser // collect err writers here, for MultiWriter use
 
 	if opts.EnableFiles {
 
@@ -143,31 +151,38 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 		}
 
 		logName := fmt.Sprintf("%s/%s.log", logDir, containerName)
-		logFileWriter := lumberjack.Logger{
+		logFileWriter := &lumberjack.Logger{
 			Filename:   logName,
 			MaxSize:    opts.MaxFileSize, // megabytes
 			MaxBackups: opts.MaxFilesCount,
-			MaxAge:     opts.MaxFilesAge, //days
+			MaxAge:     opts.MaxFilesAge, // in days
 			Compress:   true,
 		}
 
-		errFname := fmt.Sprintf("%s/%s.err", logDir, containerName)
-		errFileWriter := lumberjack.Logger{
-			Filename:   errFname,
-			MaxSize:    opts.MaxFileSize, // megabytes
-			MaxBackups: opts.MaxFilesCount,
-			MaxAge:     opts.MaxFilesAge, //days
-			Compress:   true,
+		// use std writer for errors by default
+		errFileWriter := logFileWriter
+		errFname := logName
+
+		if !opts.MixErr { // if writers not mixed make separate std and err
+			errFname := fmt.Sprintf("%s/%s.err", logDir, containerName)
+			errFileWriter = &lumberjack.Logger{
+				Filename:   errFname,
+				MaxSize:    opts.MaxFileSize, // megabytes
+				MaxBackups: opts.MaxFilesCount,
+				MaxAge:     opts.MaxFilesAge, // in days
+				Compress:   true,
+			}
 		}
 
-		logWriters = append(logWriters, &logFileWriter)
-		errWriters = append(errWriters, &errFileWriter)
+		logWriters = append(logWriters, logFileWriter)
+		errWriters = append(errWriters, errFileWriter)
 		log.Printf("[INFO] loggers created for %s and %s, max.size=%dM, max.files=%d, max.days=%d",
 			logName, errFname, opts.MaxFileSize, opts.MaxFilesCount, opts.MaxFilesAge)
 	}
 
 	if opts.EnableSyslog {
-		syslogWriter, err := syslog.Dial("udp4", opts.SyslogHost, syslog.LOG_WARNING|syslog.LOG_DAEMON, "docker/"+containerName)
+		syslogWriter, err := syslog.Dial("udp4", opts.SyslogHost, syslog.LOG_WARNING|syslog.LOG_DAEMON,
+			opts.SyslogPrefix+containerName)
 
 		if err == nil {
 			logWriters = append(logWriters, syslogWriter)
@@ -189,7 +204,7 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 
 func setupLog(dbg bool) {
 	if dbg {
-		log.Setup(log.Debug, log.CallerFile, log.Msec, log.LevelBraces)
+		log.Setup(log.Debug, log.CallerFile, log.CallerPkg, log.CallerFunc, log.Msec, log.LevelBraces)
 		return
 	}
 	log.Setup(log.Msec, log.LevelBraces)
