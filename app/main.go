@@ -164,7 +164,7 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 		errFname := logName
 
 		if !opts.MixErr { // if writers not mixed make separate std and err
-			errFname := fmt.Sprintf("%s/%s.err", logDir, containerName)
+			errFname = fmt.Sprintf("%s/%s.err", logDir, containerName)
 			errFileWriter = &lumberjack.Logger{
 				Filename:   errFname,
 				MaxSize:    opts.MaxFileSize, // megabytes
