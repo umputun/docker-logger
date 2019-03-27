@@ -21,4 +21,4 @@ script:
     --enable=megacheck --enable=structcheck --enable=gas --enable=gocyclo --enable=dupl --enable=misspell \
     --enable=unparam --enable=varcheck --enable=deadcode --enable=typecheck \
     --enable=ineffassign --enable=varcheck ./...
-  - $GOPATH/bin/goveralls -service=travis-ci -show -coverprofile=profile.cov
+  - $GOPATH/bin/goveralls -service=travis-ci -coverprofile=profile.cov
