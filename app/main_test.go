@@ -10,6 +10,8 @@ import (
 
 func Test_makeLogWriters(t *testing.T) {
 	defer os.RemoveAll("/tmp/logger.test")
+	setupLog(true)
+
 	opts := cliOpts{FilesLocation: "/tmp/logger.test", EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10}
 	stdWr, errWr := makeLogWriters(opts, "container1", "gr1")
 	assert.NotEqual(t, stdWr, errWr, "different writers for out and err")
@@ -40,6 +42,8 @@ func Test_makeLogWriters(t *testing.T) {
 
 func Test_makeLogWritersMixed(t *testing.T) {
 	defer os.RemoveAll("/tmp/logger.test")
+	setupLog(false)
+
 	opts := cliOpts{FilesLocation: "/tmp/logger.test", EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10, MixErr: true}
 	stdWr, errWr := makeLogWriters(opts, "container1", "gr1")
 	assert.Equal(t, stdWr, errWr, "same writer for out and err in mixed mode")
