@@ -187,7 +187,7 @@ func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter
 	}
 
 	if opts.EnableSyslog {
-		syslogWriter, err := getSyslogWriter(opts.SyslogHost, containerName)
+		syslogWriter, err := getSyslogWriter(opts.SyslogHost, opts.SyslogPrefix, containerName)
 
 		if err == nil {
 			logWriters = append(logWriters, syslogWriter)
