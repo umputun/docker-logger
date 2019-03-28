@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/syslog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -50,6 +49,10 @@ func main() {
 
 	if opts.Includes != nil && opts.Excludes != nil {
 		log.Fatalf("[ERROR] only single option Excludes/Includes are allowed")
+	}
+
+	if opts.EnableSyslog && !isSyslogSupported() {
+		log.Fatalf("[ERROR] syslog is not supported on this OS")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -181,8 +184,7 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 	}
 
 	if opts.EnableSyslog {
-		syslogWriter, err := syslog.Dial("udp4", opts.SyslogHost, syslog.LOG_WARNING|syslog.LOG_DAEMON,
-			opts.SyslogPrefix+containerName)
+		syslogWriter, err := getSyslogWriter(opts.SyslogHost, containerName)
 
 		if err == nil {
 			logWriters = append(logWriters, syslogWriter)
