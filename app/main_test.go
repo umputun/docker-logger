@@ -100,3 +100,21 @@ func Test_makeLogWritersSyslogFailed(t *testing.T) {
 	_, err = errWr.Write([]byte("xxx123 line 2\n"))
 	assert.NoError(t, err)
 }
+
+func Test_makeLogWritersSyslogPassed(t *testing.T) {
+	opts := cliOpts{EnableSyslog: true, SyslogHost: "127.0.0.1:514", SyslogPrefix: "docker/"}
+	stdWr, errWr := makeLogWriters(opts, "container1", "gr1")
+	assert.Equal(t, stdWr, errWr, "same writer for out and err in syslog")
+
+	// write to out writer
+	_, err := stdWr.Write([]byte("abc line 1\n"))
+	assert.NoError(t, err)
+	_, err = stdWr.Write([]byte("xxx123 line 2\n"))
+	assert.NoError(t, err)
+
+	// write to err writer
+	_, err = errWr.Write([]byte("err line 1\n"))
+	assert.NoError(t, err)
+	_, err = errWr.Write([]byte("xxx123 line 2\n"))
+	assert.NoError(t, err)
+}
