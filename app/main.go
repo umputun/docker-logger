@@ -186,7 +186,7 @@ func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter
 			logName, errFname, opts.MaxFileSize, opts.MaxFilesCount, opts.MaxFilesAge)
 	}
 
-	if opts.EnableSyslog {
+	if opts.EnableSyslog && isSyslogSupported() {
 		syslogWriter, err := getSyslogWriter(opts.SyslogHost, opts.SyslogPrefix, containerName)
 
 		if err == nil {
