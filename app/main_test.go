@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_Main(t *testing.T) {
+func Test_MainApp(t *testing.T) {
 	defer os.RemoveAll("/tmp/logger.test")
 	os.Args = []string{"app", "--files", "--loc=/tmp/logger.test"}
 
