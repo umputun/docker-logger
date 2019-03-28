@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	dockerclient "github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	log "github.com/go-pkgz/lgr"
 	"github.com/jessevdk/go-flags"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -17,18 +17,19 @@ import (
 	"github.com/umputun/docker-logger/app/logger"
 )
 
-var opts struct {
+type cliOpts struct {
 	DockerHost string `short:"d" long:"docker" env:"DOCKER_HOST" default:"unix:///var/run/docker.sock" description:"docker host"`
 
 	EnableSyslog bool   `long:"syslog" env:"LOG_SYSLOG" description:"enable logging to syslog"`
 	SyslogHost   string `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
 	SyslogPrefix string `long:"syslog-prefix" env:"SYSLOG_PREFIX" default:"docker/" description:"syslog prefix"`
 
-	EnableFiles   bool `long:"files" env:"LOG_FILES" description:"enable logging to files"`
-	MaxFileSize   int  `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
-	MaxFilesCount int  `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
-	MaxFilesAge   int  `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
-	MixErr        bool `long:"mix-err" env:"MIX_ERR" description:"send error to std output log file"`
+	EnableFiles   bool   `long:"files" env:"LOG_FILES" description:"enable logging to files"`
+	MaxFileSize   int    `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
+	MaxFilesCount int    `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
+	MaxFilesAge   int    `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
+	MixErr        bool   `long:"mix-err" env:"MIX_ERR" description:"send error to std output log file"`
+	FilesLocation string `long:"loc" env:"LOG_FILES_LOC" default:"logs" description:"log files locations"`
 
 	Excludes []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Includes []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
@@ -40,6 +41,8 @@ var revision = "unknown"
 
 func main() {
 	fmt.Printf("docker-logger %s\n", revision)
+
+	var opts cliOpts
 	if _, err := flags.Parse(&opts); err != nil {
 		os.Exit(1)
 	}
@@ -64,7 +67,7 @@ func main() {
 		cancel()
 	}()
 
-	client, err := dockerclient.NewClient(opts.DockerHost)
+	client, err := docker.NewClient(opts.DockerHost)
 	if err != nil {
 		log.Fatalf("[ERROR] failed to make docker client %s, %v", opts.DockerHost, err)
 	}
@@ -74,17 +77,17 @@ func main() {
 		log.Fatalf("[ERROR] failed to make event notifier, %v", err)
 	}
 
-	runEventLoop(ctx, events, client)
+	runEventLoop(ctx, opts, events, client)
 }
 
-func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *dockerclient.Client) {
+func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNotif, client *docker.Client) {
 	logStreams := map[string]logger.LogStreamer{}
 
 	procEvent := func(event discovery.Event) {
 
 		if event.Status {
 			// new/started container detected
-			logWriter, errWriter := makeLogWriters(event.ContainerName, event.Group, opts.ExtJSON)
+			logWriter, errWriter := makeLogWriters(opts, event.ContainerName, event.Group)
 			ls := logger.LogStreamer{
 				DockerClient:  client,
 				ContainerID:   event.ContainerID,
@@ -134,7 +137,7 @@ func runEventLoop(ctx context.Context, events *discovery.EventNotif, client *doc
 }
 
 // makeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
-func makeLogWriters(containerName string, group string, isExt bool) (logWriter, errWriter io.WriteCloser) {
+func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s/%s", group, containerName)
 	if !opts.EnableFiles && !opts.EnableSyslog {
 		log.Fatalf("[ERROR] either files or syslog has to be enabled")
@@ -145,9 +148,9 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 
 	if opts.EnableFiles {
 
-		logDir := "logs"
+		logDir := opts.FilesLocation
 		if group != "" {
-			logDir = fmt.Sprintf("logs/%s", group)
+			logDir = fmt.Sprintf("%s/%s", opts.FilesLocation, group)
 		}
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			log.Fatalf("[ERROR] can't make directory %s, %v", logDir, err)
@@ -196,7 +199,7 @@ func makeLogWriters(containerName string, group string, isExt bool) (logWriter, 
 
 	lw := logger.NewMultiWriterIgnoreErrors(logWriters...)
 	ew := logger.NewMultiWriterIgnoreErrors(errWriters...)
-	if isExt {
+	if opts.ExtJSON {
 		lw = lw.WithExtJSON(containerName, group)
 		ew = ew.WithExtJSON(containerName, group)
 	}
