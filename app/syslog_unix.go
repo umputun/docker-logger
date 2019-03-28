@@ -7,8 +7,8 @@ import (
 	"log/syslog"
 )
 
-func getSyslogWriter(syslogHost, containerName string) (io.WriteCloser, error) {
-  return syslog.Dial("udp4", syslogHost, syslog.LOG_WARNING|syslog.LOG_DAEMON, "docker/"+containerName)
+func getSyslogWriter(syslogHost, syslogPrefix, containerName string) (io.WriteCloser, error) {
+	return syslog.Dial("udp4", syslogHost, syslog.LOG_WARNING|syslog.LOG_DAEMON, syslogPrefix+containerName)
 }
 
 func isSyslogSupported() bool {

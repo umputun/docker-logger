@@ -7,8 +7,8 @@ import (
 	"io"
 )
 
-func getSyslogWriter(syslogHost, containerName string) (io.WriteCloser, error) {
-  return nil, errors.New("syslog is not supported on this os")
+func getSyslogWriter(syslogHost, syslogPrefix, containerName string) (io.WriteCloser, error) {
+	return nil, errors.New("syslog is not supported on this os")
 }
 
 func isSyslogSupported() bool {
