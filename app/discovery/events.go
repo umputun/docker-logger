@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	dockerclient "github.com/fsouza/go-dockerclient"
+	docker "github.com/fsouza/go-dockerclient"
 	log "github.com/go-pkgz/lgr"
 	"github.com/pkg/errors"
 )
@@ -29,8 +29,8 @@ type Event struct {
 
 // DockerClient defines interface listing containers and subscribing to events
 type DockerClient interface {
-	ListContainers(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error)
-	AddEventListener(listener chan<- *dockerclient.APIEvents) error
+	ListContainers(opts docker.ListContainersOptions) ([]docker.APIContainers, error)
+	AddEventListener(listener chan<- *docker.APIEvents) error
 }
 
 var reGroup = regexp.MustCompile(`/(.*?)/`)
@@ -44,11 +44,13 @@ func NewEventNotif(dockerClient DockerClient, excludes, includes []string) (*Eve
 		includes:     includes,
 		eventsCh:     make(chan Event, 100),
 	}
+
+	// first get all currently running containers
+	if err := res.emitRunningContainers(); err != nil {
+		return nil, errors.Wrap(err, "failed to emit containers")
+	}
+
 	go func() {
-		// first get all currently running containers
-		if err := res.emitRunningContainers(); err != nil {
-			log.Fatalf("[ERROR] failed to emit containers, %v", err)
-		}
 		res.activate(dockerClient) // activate listener for new container events
 	}()
 
@@ -63,7 +65,7 @@ func (e *EventNotif) Channel() (res <-chan Event) {
 // activate starts blocking listener for all docker events
 // filters everything except "container" type, detects stop/start events and publishes to eventsCh
 func (e *EventNotif) activate(client DockerClient) {
-	dockerEventsCh := make(chan *dockerclient.APIEvents)
+	dockerEventsCh := make(chan *docker.APIEvents)
 	if err := client.AddEventListener(dockerEventsCh); err != nil {
 		log.Fatalf("[ERROR] can't add even listener, %v", err)
 	}
@@ -103,7 +105,7 @@ func (e *EventNotif) activate(client DockerClient) {
 // emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events
 func (e *EventNotif) emitRunningContainers() error {
 
-	containers, err := e.dockerClient.ListContainers(dockerclient.ListContainersOptions{All: false})
+	containers, err := e.dockerClient.ListContainers(docker.ListContainersOptions{All: false})
 	if err != nil {
 		return errors.Wrap(err, "can't list containers")
 	}

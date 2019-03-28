@@ -11,6 +11,7 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	log "github.com/go-pkgz/lgr"
 	"github.com/jessevdk/go-flags"
+	"github.com/pkg/errors"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/umputun/docker-logger/app/discovery"
@@ -49,16 +50,22 @@ func main() {
 	setupLog(opts.Dbg)
 
 	log.Printf("[INFO] options: %+v", opts)
+	if err := do(context.Background(), opts); err != nil {
+		log.Printf("[ERROR] failed, %v", err)
+	}
+}
+
+func do(ctx context.Context, opts cliOpts) error {
 
 	if opts.Includes != nil && opts.Excludes != nil {
-		log.Fatalf("[ERROR] only single option Excludes/Includes are allowed")
+		return errors.New("only single option Excludes/Includes are allowed")
 	}
 
 	if opts.EnableSyslog && !isSyslogSupported() {
-		log.Fatalf("[ERROR] syslog is not supported on this OS")
+		return errors.New("syslog is not supported on this OS")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	go func() { // catch signal and invoke graceful termination
 		stop := make(chan os.Signal, 1)
 		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -69,15 +76,16 @@ func main() {
 
 	client, err := docker.NewClient(opts.DockerHost)
 	if err != nil {
-		log.Fatalf("[ERROR] failed to make docker client %s, %v", opts.DockerHost, err)
+		return errors.Wrapf(err, "failed to make docker client %s", err)
 	}
 
 	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes)
 	if err != nil {
-		log.Fatalf("[ERROR] failed to make event notifier, %v", err)
+		return errors.Wrap(err, "failed to make event notifier")
 	}
 
 	runEventLoop(ctx, opts, events, client)
+	return nil
 }
 
 func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNotif, client *docker.Client) {

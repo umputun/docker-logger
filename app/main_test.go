@@ -1,10 +1,9 @@
 package main
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
-	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -12,28 +11,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_MainApp(t *testing.T) {
+func Test_Do(t *testing.T) {
+
+	if os.Getenv("TEST_DOCKER") == "" {
+		t.Skip("skip docker tests")
+	}
+
 	defer os.RemoveAll("/tmp/logger.test")
-	os.Args = []string{"app", "--files", "--loc=/tmp/logger.test"}
-
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
-		require.Nil(t, err)
-	}()
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		st := time.Now()
-		main()
-		assert.True(t, time.Since(st).Seconds() < 1, "should take about 500msec")
-		wg.Done()
-	}()
+	opts := cliOpts{
+		DockerHost:    "unix:///var/run/docker.sock",
+		FilesLocation: "/tmp/logger.test",
+		EnableFiles:   true,
+		MaxFileSize:   1,
+		MaxFilesCount: 10,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+	defer cancel()
+	err := do(ctx, opts)
+	require.NoError(t, err)
 
 	time.Sleep(200 * time.Millisecond) // let it start
-
-	wg.Wait()
 }
 
 func Test_makeLogWriters(t *testing.T) {
