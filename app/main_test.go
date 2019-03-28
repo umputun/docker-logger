@@ -3,10 +3,38 @@ package main
 import (
 	"io/ioutil"
 	"os"
+	"sync"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func Test_Main(t *testing.T) {
+	defer os.RemoveAll("/tmp/logger.test")
+	os.Args = []string{"app", "--files", "--loc=/tmp/logger.test"}
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+		require.Nil(t, err)
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		st := time.Now()
+		main()
+		assert.True(t, time.Since(st).Seconds() < 1, "should take about 500msec")
+		wg.Done()
+	}()
+
+	time.Sleep(200 * time.Millisecond) // let it start
+
+	wg.Wait()
+}
 
 func Test_makeLogWriters(t *testing.T) {
 	defer os.RemoveAll("/tmp/logger.test")
