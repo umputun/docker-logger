@@ -17,6 +17,7 @@ import (
 
 	"github.com/umputun/docker-logger/app/discovery"
 	"github.com/umputun/docker-logger/app/logger"
+	"github.com/umputun/docker-logger/app/syslog"
 )
 
 type cliOpts struct {
@@ -71,7 +72,7 @@ func do(ctx context.Context, opts cliOpts) error {
 		return errors.New("only single option Excludes/Includes are allowed")
 	}
 
-	if opts.EnableSyslog && !isSyslogSupported() {
+	if opts.EnableSyslog && !syslog.IsSupported() {
 		return errors.New("syslog is not supported on this OS")
 	}
 
@@ -200,8 +201,8 @@ func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter
 			logName, errFname, opts.MaxFileSize, opts.MaxFilesCount, opts.MaxFilesAge)
 	}
 
-	if opts.EnableSyslog && isSyslogSupported() {
-		syslogWriter, err := getSyslogWriter(opts.SyslogHost, opts.SyslogPrefix, containerName)
+	if opts.EnableSyslog && syslog.IsSupported() {
+		syslogWriter, err := syslog.GetWriter(opts.SyslogHost, opts.SyslogPrefix, containerName)
 
 		if err == nil {
 			logWriters = append(logWriters, syslogWriter)
