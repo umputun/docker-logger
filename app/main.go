@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	docker "github.com/fsouza/go-dockerclient"
@@ -49,8 +50,17 @@ func main() {
 	}
 	setupLog(opts.Dbg)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { // catch signal and invoke graceful termination
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+		<-stop
+		log.Printf("[WARN] interrupt signal")
+		cancel()
+	}()
+
 	log.Printf("[INFO] options: %+v", opts)
-	if err := do(context.Background(), opts); err != nil {
+	if err := do(ctx, opts); err != nil {
 		log.Printf("[ERROR] failed, %v", err)
 	}
 }
@@ -64,15 +74,6 @@ func do(ctx context.Context, opts cliOpts) error {
 	if opts.EnableSyslog && !isSyslogSupported() {
 		return errors.New("syslog is not supported on this OS")
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	go func() { // catch signal and invoke graceful termination
-		stop := make(chan os.Signal, 1)
-		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-		<-stop
-		log.Print("[WARN] interrupt signal")
-		cancel()
-	}()
 
 	client, err := docker.NewClient(opts.DockerHost)
 	if err != nil {
@@ -112,7 +113,7 @@ func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNoti
 		// removed/stopped container detected
 		ls, ok := logStreams[event.ContainerID]
 		if !ok {
-			log.Printf("[DEBUG] close loggers event %+v for non-mapped container", event)
+			log.Printf("[DEBUG] close loggers event %+v for non-mapped container ignored", event)
 			return
 		}
 
@@ -138,6 +139,7 @@ func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNoti
 			log.Print("[WARN] event loop terminated")
 			return
 		case event := <-events.Channel():
+			log.Printf("[DEBUG] received event %+v", event)
 			procEvent(event)
 		}
 	}
@@ -146,7 +148,7 @@ func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNoti
 
 // makeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
 func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter, errWriter io.WriteCloser) {
-	log.Printf("[DEBUG] create log writer for %s/%s", group, containerName)
+	log.Printf("[DEBUG] create log writer for %s", strings.TrimPrefix(group+"/"+containerName, "/"))
 	if !opts.EnableFiles && !opts.EnableSyslog {
 		log.Fatalf("[ERROR] either files or syslog has to be enabled")
 	}
@@ -217,8 +219,8 @@ func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter
 
 func setupLog(dbg bool) {
 	if dbg {
-		log.Setup(log.Debug, log.CallerFile, log.CallerPkg, log.CallerFunc, log.Msec, log.LevelBraces)
+		log.Setup(log.Debug, log.CallerFile, log.CallerFunc, log.Msec, log.LevelBraces)
 		return
 	}
-	log.Setup(log.Msec, log.LevelBraces)
+	log.Setup(log.Msec, log.LevelBraces, log.CallerPkg)
 }
