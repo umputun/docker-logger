@@ -137,6 +137,10 @@ func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNoti
 		select {
 		case <-ctx.Done():
 			log.Print("[WARN] event loop terminated")
+			for _, v := range logStreams {
+				v.Close()
+				log.Printf("[INFO] close logger stream for %s", v.ContainerName)
+			}
 			return
 		case event := <-events.Channel():
 			log.Printf("[DEBUG] received event %+v", event)
