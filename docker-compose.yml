@@ -17,12 +17,12 @@ services:
         environment:
             - LOG_FILES=true
             - LOG_SYSLOG=false
-            - EXCLUDE=monit,docker-logger
+            - EXCLUDE=docker-logger
             - MAX_FILES=10
             - MAX_SIZE=50
             - MAX_AGE=20
             - DEBUG=false
-            - TIME_ZONE=America/Chicago
+#            - TIME_ZONE=America/Chicago
 
         volumes:
             - ./logs:/srv/logs

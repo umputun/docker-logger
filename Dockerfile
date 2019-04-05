@@ -29,7 +29,10 @@ RUN \
 RUN if [ -z "$COVERALLS_TOKEN" ] ; then echo "coverall not enabled" ; \
     else goveralls -coverprofile=/profile.cov -service=travis-ci -repotoken $COVERALLS_TOKEN || echo "coverall failed!"; fi
 
-FROM umputun/baseimage:app-latest
+
+FROM alpine:3.9
+
+RUN apk add --update --no-cache tzdata
 
 COPY --from=build /build/docker-logger /srv/
 COPY init.sh /init.sh
