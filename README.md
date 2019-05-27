@@ -5,6 +5,8 @@
 the `-t` option and configured with a logging driver that works with docker logs (journald and json-file).
 It can forward both stdout and stderr of containers to local, rotated files and/or to remote syslog.
 
+_note: [dkll](https://github.com/umputun/dkll) inlcudes all functionality of docker-logger, but adds server and cli client_
+
 ## Install
 
 Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob/master/docker-compose.yml), customize if needed and run with `docker-compose up -d`. By default `docker-logger` will collect all logs from containers and put it to `./logs` directory.
