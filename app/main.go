@@ -97,6 +97,12 @@ func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNoti
 
 		if event.Status {
 			// new/started container detected
+
+			if _, found := logStreams[event.ContainerID]; found {
+				log.Printf("[WARN] ignore dbl-start %+v", event)
+				return
+			}
+
 			logWriter, errWriter := makeLogWriters(opts, event.ContainerName, event.Group)
 			ls := logger.LogStreamer{
 				DockerClient:  client,
