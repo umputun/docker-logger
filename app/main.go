@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -34,10 +35,11 @@ type cliOpts struct {
 	MixErr        bool   `long:"mix-err" env:"MIX_ERR" description:"send error to std output log file"`
 	FilesLocation string `long:"loc" env:"LOG_FILES_LOC" default:"logs" description:"log files locations"`
 
-	Excludes []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
-	Includes []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
-	ExtJSON  bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
-	Dbg      bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
+	Excludes        []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
+	Includes        []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
+	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"`
+	ExtJSON         bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
+	Dbg             bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
 var revision = "unknown"
@@ -68,6 +70,17 @@ func main() {
 
 func do(ctx context.Context, opts cliOpts) error {
 
+	if opts.Includes != nil && opts.IncludesPattern != "" {
+		return errors.New("only single option Includes/IncludesPattern are allowed")
+	}
+
+	if opts.IncludesPattern != "" {
+		_, err := regexp.Compile(opts.IncludesPattern)
+		if err != nil {
+			return errors.New("could not parse Includes Pattern")
+		}
+	}
+
 	if opts.Includes != nil && opts.Excludes != nil {
 		return errors.New("only single option Excludes/Includes are allowed")
 	}
@@ -81,7 +94,7 @@ func do(ctx context.Context, opts cliOpts) error {
 		return errors.Wrapf(err, "failed to make docker client %s", err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes)
+	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern)
 	if err != nil {
 		return errors.Wrap(err, "failed to make event notifier")
 	}

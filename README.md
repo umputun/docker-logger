@@ -15,25 +15,27 @@ Copy provided [docker-compose.yml](https://github.com/umputun/docker-logger/blob
 
 All changes can be done via container's environment in `docker-compose.yml` or with command line
 
-| Command line    | Environment   | Default                     | Description                                    |
-| --------------- | ------------- | --------------------------- | ---------------------------------------------- |
-| `--docker`      | `DOCKER_HOST` | unix:///var/run/docker.sock | docker host                                    |
-| `--syslog-host` | `SYSLOG_HOST` | 127.0.0.1:514               | syslog remote host (udp4)                      |
-| `--files`       | `LOG_FILES`   | No                          | enable logging to files                        |
-| `--syslog`      | `LOG_SYSLOG`  | No                          | enable logging to syslog                       |
-| `--max-size`    | `MAX_SIZE`    | 10                          | size of log triggering rotation (MB)           |
-| `--max-files`   | `MAX_FILES`   | 5                           | number of rotated files to retain              |
-| `--mix-err`     | `MIX_ERR`     | false                       | send error to std output log file
-| `--max-age`     | `MAX_AGE`     | 30                          | maximum number of days to retain               |
-| `--exclude`     | `EXCLUDE`     |                             | excluded container names, comma separated      |
-| `--include`     | `INCLUDE`     |                             | only included container names, comma separated |
-|                 | `TIME_ZONE`   | UTC                         | time zone for container                        |
-| `--json`, `-j`  | `JSON`        | false                       | output formatted as JSON                       |
+| Command line        | Environment       | Default                     | Description                                    |
+| ------------------- | ----------------- | --------------------------- | ---------------------------------------------- |
+| `--docker`          | `DOCKER_HOST`     | unix:///var/run/docker.sock | docker host                                    |
+| `--syslog-host`     | `SYSLOG_HOST`     | 127.0.0.1:514               | syslog remote host (udp4)                      |
+| `--files`           | `LOG_FILES`       | No                          | enable logging to files                        |
+| `--syslog`          | `LOG_SYSLOG`      | No                          | enable logging to syslog                       |
+| `--max-size`        | `MAX_SIZE`        | 10                          | size of log triggering rotation (MB)           |
+| `--max-files`       | `MAX_FILES`       | 5                           | number of rotated files to retain              |
+| `--mix-err`         | `MIX_ERR`         | false                       | send error to std output log file              |
+| `--max-age`         | `MAX_AGE`         | 30                          | maximum number of days to retain               |
+| `--exclude`         | `EXCLUDE`         |                             | excluded container names, comma separated      |
+| `--include`         | `INCLUDE`         |                             | only included container names, comma separated |
+| `--include-pattern` | `INCLUDE_PATTERN` |                             | only include container names matching a regex  |
+|                     | `TIME_ZONE`       | UTC                         | time zone for container                        |
+| `--json`, `-j`      | `JSON`            | false                       | output formatted as JSON                       |
 
 
 - at least one of destinations (`files` or `syslog`) should be allowed
 - location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)
 - both `--exclude` and `--include` flags are optional and mutually exclusive, i.e. if `--exclude` defined `--include` not allowed, and vise versa.
+- both `--include` and `--include-pattern` flags are optional and mutually exclusive, i.e. if `--include` defined `--include-pattern` not allowed, and vise versa.
 
 ## Build from the source
 
