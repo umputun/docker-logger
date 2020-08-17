@@ -12,10 +12,11 @@ import (
 
 // EventNotif emits all changes from all containers states
 type EventNotif struct {
-	dockerClient DockerClient
-	excludes     []string
-	includes     []string
-	eventsCh     chan Event
+	dockerClient   DockerClient
+	excludes       []string
+	includes       []string
+	includesRegexp *regexp.Regexp
+	eventsCh       chan Event
 }
 
 // Event is simplified docker.APIEvents for containers only, exposed to caller
@@ -36,13 +37,24 @@ type DockerClient interface {
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient DockerClient, excludes, includes []string) (*EventNotif, error) {
-	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v", excludes, includes)
+func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern string) (*EventNotif, error) {
+	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v", excludes, includes, includesPattern)
+
+	var err error
+	var re *regexp.Regexp = nil
+	if includesPattern != "" {
+		re, err = regexp.Compile(includesPattern)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to compile includesPattern")
+		}
+	}
+
 	res := EventNotif{
-		dockerClient: dockerClient,
-		excludes:     excludes,
-		includes:     includes,
-		eventsCh:     make(chan Event, 100),
+		dockerClient:   dockerClient,
+		excludes:       excludes,
+		includes:       includes,
+		includesRegexp: re,
+		eventsCh:       make(chan Event, 100),
 	}
 
 	// first get all currently running containers
@@ -140,6 +152,9 @@ func (e *EventNotif) group(image string) string {
 }
 
 func (e *EventNotif) isAllowed(containerName string) bool {
+	if e.includesRegexp != nil {
+		return e.includesRegexp.MatchString(containerName)
+	}
 	if len(e.includes) > 0 {
 		return contains(containerName, e.includes)
 	}
