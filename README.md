@@ -1,4 +1,4 @@
-# docker-logger [![Build Status](https://github.com/umputun/docker-logger/workflows/build/badge.svg)](https://github.com/umputun/docker-logger/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/umputun/docker-logger)](https://goreportcard.com/report/github.com/umputun/docker-logger) [![Docker Automated build](https://img.shields.io/docker/automated/jrottenberg/ffmpeg.svg)](https://hub.docker.com/r/umputun/docker-logger/)
+# docker-logger [![Go Report Card](https://goreportcard.com/badge/github.com/umputun/docker-logger)](https://goreportcard.com/report/github.com/umputun/docker-logger) [![Docker Automated build](https://img.shields.io/docker/automated/jrottenberg/ffmpeg.svg)](https://hub.docker.com/r/umputun/docker-logger/)
 
 
 **docker-logger** is a small application collecting logs from other containers on the host that started without
