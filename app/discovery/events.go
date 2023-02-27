@@ -16,6 +16,7 @@ type EventNotif struct {
 	excludes       []string
 	includes       []string
 	includesRegexp *regexp.Regexp
+	excludesRegexp *regexp.Regexp
 	eventsCh       chan Event
 }
 
@@ -37,15 +38,23 @@ type DockerClient interface {
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern string) (*EventNotif, error) {
-	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v", excludes, includes, includesPattern)
+func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern string) (*EventNotif, error) {
+	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v", excludes, includes, includesPattern, excludesPattern)
 
 	var err error
-	var re *regexp.Regexp = nil
+	var includesRe *regexp.Regexp = nil
 	if includesPattern != "" {
-		re, err = regexp.Compile(includesPattern)
+		includesRe, err = regexp.Compile(includesPattern)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compile includesPattern")
+		}
+	}
+
+	var excludesRe *regexp.Regexp = nil
+	if excludesPattern != "" {
+		excludesRe, err = regexp.Compile(excludesPattern)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to compile excludesPattern")
 		}
 	}
 
@@ -53,7 +62,8 @@ func NewEventNotif(dockerClient DockerClient, excludes, includes []string, inclu
 		dockerClient:   dockerClient,
 		excludes:       excludes,
 		includes:       includes,
-		includesRegexp: re,
+		includesRegexp: includesRe,
+		excludesRegexp: excludesRe,
 		eventsCh:       make(chan Event, 100),
 	}
 
@@ -154,6 +164,9 @@ func (e *EventNotif) group(image string) string {
 func (e *EventNotif) isAllowed(containerName string) bool {
 	if e.includesRegexp != nil {
 		return e.includesRegexp.MatchString(containerName)
+	}
+	if e.excludesRegexp != nil {
+		return !e.excludesRegexp.MatchString(containerName)
 	}
 	if len(e.includes) > 0 {
 		return contains(containerName, e.includes)

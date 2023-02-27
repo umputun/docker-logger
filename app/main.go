@@ -38,6 +38,7 @@ type cliOpts struct {
 	Excludes        []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Includes        []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
 	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"`
+	ExcludesPattern string   `short:"e" long:"exclude-pattern" env:"EXCLUDE_PATTERN" env-delim:"," description:"excluded container names regex pattern"`
 	ExtJSON         bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
 	Dbg             bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
@@ -85,6 +86,17 @@ func do(ctx context.Context, opts cliOpts) error {
 		return errors.New("only single option Excludes/Includes are allowed")
 	}
 
+	if opts.Excludes != nil && opts.ExcludesPattern != "" {
+		return errors.New("only single option Excludes/ExcludesPattern are allowed")
+	}
+
+	if opts.ExcludesPattern != "" {
+		_, err := regexp.Compile(opts.ExcludesPattern)
+		if err != nil {
+			return errors.New("could not parse Excludes Pattern")
+		}
+	}
+
 	if opts.EnableSyslog && !syslog.IsSupported() {
 		return errors.New("syslog is not supported on this OS")
 	}
@@ -94,7 +106,7 @@ func do(ctx context.Context, opts cliOpts) error {
 		return errors.Wrapf(err, "failed to make docker client %s", err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern)
+	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern)
 	if err != nil {
 		return errors.Wrap(err, "failed to make event notifier")
 	}

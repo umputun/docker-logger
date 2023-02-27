@@ -14,7 +14,7 @@ import (
 func TestEvents(t *testing.T) {
 
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "")
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "", "")
 	require.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 	go client.add("id1", "name1")
@@ -31,7 +31,7 @@ func TestEvents(t *testing.T) {
 
 func TestEventsIncludes(t *testing.T) {
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{}, []string{"tst_included"}, "")
+	events, err := NewEventNotif(client, []string{}, []string{"tst_included"}, "", "")
 	require.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 	go client.add("id2", "tst_included")
@@ -54,7 +54,7 @@ func TestEmit(t *testing.T) {
 	client.add("id2", "tst_exclude")
 	client.add("id2", "name2")
 
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "")
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "", "")
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
@@ -74,7 +74,7 @@ func TestEmitIncludes(t *testing.T) {
 	client.add("id2", "tst_include")
 	client.add("id2", "name2")
 
-	events, err := NewEventNotif(client, []string{}, []string{"tst_include"}, "")
+	events, err := NewEventNotif(client, []string{}, []string{"tst_include"}, "", "")
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
@@ -85,22 +85,33 @@ func TestEmitIncludes(t *testing.T) {
 func TestNewEventNotifWithNils(t *testing.T) {
 	client := &mockDockerClient{}
 
-	_, err := NewEventNotif(client, nil, nil, "")
+	_, err := NewEventNotif(client, nil, nil, "", "")
 	require.NoError(t, err)
 }
 
 func TestIsAllowedExclude(t *testing.T) {
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, nil, "")
+	events, err := NewEventNotif(client, []string{"tst_exclude"}, nil, "", "")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("name1"))
 	assert.False(t, events.isAllowed("tst_exclude"))
 }
 
+func TestIsAllowedExcludePattern(t *testing.T) {
+	client := &mockDockerClient{}
+	events, err := NewEventNotif(client, nil, nil, "", "tst_exclude.*")
+	require.NoError(t, err)
+
+	assert.True(t, events.isAllowed("tst_include"))
+	assert.True(t, events.isAllowed("tst_include_yes"))
+	assert.False(t, events.isAllowed("tst_exclude"))
+	assert.False(t, events.isAllowed("tst_exclude_no"))
+}
+
 func TestIsAllowedInclude(t *testing.T) {
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, nil, []string{"tst_include"}, "")
+	events, err := NewEventNotif(client, nil, []string{"tst_include"}, "", "")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -110,7 +121,7 @@ func TestIsAllowedInclude(t *testing.T) {
 
 func TestIsAllowedIncludePattern(t *testing.T) {
 	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, nil, nil, "tst_include.*")
+	events, err := NewEventNotif(client, nil, nil, "tst_include.*", "")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
