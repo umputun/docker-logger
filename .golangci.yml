@@ -2,7 +2,7 @@ linters-settings:
   govet:
     check-shadowing: true
   golint:
-    min-confidence: 0
+    min-confidence: 0.6
   gocyclo:
     min-complexity: 15
   maligned:
@@ -18,43 +18,87 @@ linters-settings:
     line-length: 140
   gocritic:
     enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
       - performance
       - style
-      - experimental
     disabled-checks:
-      - wrapperFunc
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - rangeValCopy
+      - hugeParam
 
 linters:
   disable-all: true
   enable:
     - megacheck
+    - revive
     - govet
     - unconvert
-    - megacheck
-    - structcheck
     - gas
-    - gocyclo
-    - dupl
     - misspell
     - unparam
-    - varcheck
-    - deadcode
     - typecheck
     - ineffassign
-    - varcheck
+    - unused
+    - stylecheck
+    - gochecknoinits
+    - exportloopref
+    - gocritic
+    - nakedret
+    - gosimple
+    - prealloc
+    - bodyclose
+    - goimports
+    - gofmt
+    - gochecknoinits
+    - depguard
+    - errcheck
+    - goprintffuncname
+    - lll
+    - dogsled
+    - goconst
+    - whitespace
+    - gochecknoglobals
+    - durationcheck
+    - errname
+    - exhaustive
+    - funlen
+    - goconst
+    - nestif
+    - nilerr
+    - tenv
+    - usestdlibvars
   fast: false
 
 
 run:
-  modules-download-mode: vendor
+  #  modules-download-mode: vendor
   skip-dirs:
     - vendor
+  concurrency: 8
 
 issues:
   exclude-rules:
+    - text: "should have a package comment"
+      linters:
+        - golint
+    - text: "package-comments: should have a package comment"
+      linters:
+        - revive
+    - text: "exitAfterDefer:"
+      linters:
+        - gocritic
+    - text: "whyNoLint: include an explanation for nolint directive"
+      linters:
+        - gocritic
     - text: "weak cryptographic primitive"
       linters:
         - gosec
-
-service:
-  golangci-lint-version: 1.15.x
+    - text: "at least one file in a package should have a package comment"
+      linters:
+        - stylecheck
+  exclude-use-default: false

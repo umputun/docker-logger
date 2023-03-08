@@ -38,7 +38,7 @@ func NewMultiWriterIgnoreErrors(writers ...io.WriteCloser) *MultiWriter {
 }
 
 // WithExtJSON turn JSON output mode on
-func (w *MultiWriter) WithExtJSON(containerName string, group string) *MultiWriter {
+func (w *MultiWriter) WithExtJSON(containerName, group string) *MultiWriter {
 	w.container = containerName
 	w.group = group
 	w.isJSON = true

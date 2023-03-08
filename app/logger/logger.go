@@ -24,7 +24,7 @@ type LogStreamer struct {
 	LogWriter io.WriteCloser
 	ErrWriter io.WriteCloser
 
-	ctx    context.Context
+	ctx    context.Context // nolint:containedctx
 	cancel context.CancelFunc
 }
 

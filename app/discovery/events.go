@@ -42,7 +42,7 @@ func NewEventNotif(dockerClient DockerClient, excludes, includes []string, inclu
 	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v", excludes, includes, includesPattern, excludesPattern)
 
 	var err error
-	var includesRe *regexp.Regexp = nil
+	var includesRe *regexp.Regexp
 	if includesPattern != "" {
 		includesRe, err = regexp.Compile(includesPattern)
 		if err != nil {
@@ -96,37 +96,37 @@ func (e *EventNotif) activate(client DockerClient) {
 	downStatuses := []string{"die", "destroy", "stop", "pause"}
 
 	for dockerEvent := range dockerEventsCh {
-		if dockerEvent.Type == "container" {
-
-			if !contains(dockerEvent.Status, upStatuses) && !contains(dockerEvent.Status, downStatuses) {
-				continue
-			}
-
-			log.Printf("[DEBUG] api event %+v", dockerEvent)
-			containerName := strings.TrimPrefix(dockerEvent.Actor.Attributes["name"], "/")
-
-			if !e.isAllowed(containerName) {
-				log.Printf("[INFO] container %s excluded", containerName)
-				continue
-			}
-
-			event := Event{
-				ContainerID:   dockerEvent.Actor.ID,
-				ContainerName: containerName,
-				Status:        contains(dockerEvent.Status, upStatuses),
-				TS:            time.Unix(dockerEvent.Time/1000, dockerEvent.TimeNano),
-				Group:         e.group(dockerEvent.From),
-			}
-			log.Printf("[INFO] new event %+v", event)
-			e.eventsCh <- event
+		if dockerEvent.Type != "container" {
+			continue
 		}
+
+		if !contains(dockerEvent.Status, upStatuses) && !contains(dockerEvent.Status, downStatuses) {
+			continue
+		}
+
+		log.Printf("[DEBUG] api event %+v", dockerEvent)
+		containerName := strings.TrimPrefix(dockerEvent.Actor.Attributes["name"], "/")
+
+		if !e.isAllowed(containerName) {
+			log.Printf("[INFO] container %s excluded", containerName)
+			continue
+		}
+
+		event := Event{
+			ContainerID:   dockerEvent.Actor.ID,
+			ContainerName: containerName,
+			Status:        contains(dockerEvent.Status, upStatuses),
+			TS:            time.Unix(dockerEvent.Time/1000, dockerEvent.TimeNano),
+			Group:         e.group(dockerEvent.From),
+		}
+		log.Printf("[INFO] new event %+v", event)
+		e.eventsCh <- event
 	}
 	log.Fatalf("[ERROR] event listener failed")
 }
 
 // emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events
 func (e *EventNotif) emitRunningContainers() error {
-
 	containers, err := e.dockerClient.ListContainers(docker.ListContainersOptions{All: false})
 	if err != nil {
 		return errors.Wrap(err, "can't list containers")

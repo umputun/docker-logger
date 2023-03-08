@@ -12,7 +12,6 @@ import (
 )
 
 func TestMultiWriter_Write(t *testing.T) {
-
 	// with ext JSON
 	w1, w2 := wrMock{}, wrMock{}
 	writer := NewMultiWriterIgnoreErrors(&w1, &w2).WithExtJSON("c1", "g1")
@@ -36,7 +35,6 @@ func TestMultiWriter_Write(t *testing.T) {
 }
 
 func TestMultiWriter_extJSON(t *testing.T) {
-
 	writer := NewMultiWriterIgnoreErrors().WithExtJSON("c1", "g1")
 	res, err := writer.extJSON([]byte("test msg"))
 	assert.NoError(t, err)
