@@ -37,12 +37,12 @@ type cliOpts struct {
 
 	Excludes        []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Includes        []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
-	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"`
+	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"` //nolint:lll
 	ExtJSON         bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
 	Dbg             bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
-var revision = "unknown"
+var revision = "unknown" //nolint:gochecknoglobals
 
 func main() {
 	fmt.Printf("docker-logger %s\n", revision)
@@ -63,13 +63,12 @@ func main() {
 	}()
 
 	log.Printf("[INFO] options: %+v", opts)
-	if err := do(ctx, opts); err != nil {
+	if err := do(ctx, &opts); err != nil {
 		log.Printf("[ERROR] failed, %v", err)
 	}
 }
 
-func do(ctx context.Context, opts cliOpts) error {
-
+func do(ctx context.Context, opts *cliOpts) error {
 	if opts.Includes != nil && opts.IncludesPattern != "" {
 		return errors.New("only single option Includes/IncludesPattern are allowed")
 	}
@@ -103,11 +102,11 @@ func do(ctx context.Context, opts cliOpts) error {
 	return nil
 }
 
-func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNotif, client *docker.Client) {
+//nolint:funlen
+func runEventLoop(ctx context.Context, opts *cliOpts, events *discovery.EventNotif, client *docker.Client) {
 	logStreams := map[string]logger.LogStreamer{}
 
 	procEvent := func(event discovery.Event) {
-
 		if event.Status {
 			// new/started container detected
 
@@ -167,11 +166,12 @@ func runEventLoop(ctx context.Context, opts cliOpts, events *discovery.EventNoti
 			procEvent(event)
 		}
 	}
-
 }
 
 // makeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
-func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter, errWriter io.WriteCloser) {
+//
+//nolint:funlen
+func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s", strings.TrimPrefix(group+"/"+containerName, "/"))
 	if !opts.EnableFiles && !opts.EnableSyslog {
 		log.Fatalf("[ERROR] either files or syslog has to be enabled")
@@ -181,12 +181,11 @@ func makeLogWriters(opts cliOpts, containerName string, group string) (logWriter
 	var errWriters []io.WriteCloser // collect err writers here, for MultiWriter use
 
 	if opts.EnableFiles {
-
 		logDir := opts.FilesLocation
 		if group != "" {
 			logDir = fmt.Sprintf("%s/%s", opts.FilesLocation, group)
 		}
-		if err := os.MkdirAll(logDir, 0755); err != nil {
+		if err := os.MkdirAll(logDir, 0o750); err != nil {
 			log.Fatalf("[ERROR] can't make directory %s, %v", logDir, err)
 		}
 

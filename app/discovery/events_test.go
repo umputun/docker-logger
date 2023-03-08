@@ -12,7 +12,6 @@ import (
 )
 
 func TestEvents(t *testing.T) {
-
 	client := &mockDockerClient{}
 	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "")
 	require.NoError(t, err)
@@ -115,12 +114,11 @@ func TestIsAllowedIncludePattern(t *testing.T) {
 
 	assert.True(t, events.isAllowed("tst_include"))
 	assert.True(t, events.isAllowed("tst_include_yes"))
-	assert.False(t, events.isAllowed("tst_includ_no"))
+	assert.False(t, events.isAllowed("tst_includ_no")) //nolint:misspell
 	assert.False(t, events.isAllowed("tst_exclude_no"))
 }
 
 func TestGroup(t *testing.T) {
-
 	d := EventNotif{}
 	tbl := []struct {
 		inp string
@@ -155,7 +153,7 @@ type mockDockerClient struct {
 	sync.Mutex
 }
 
-func (m *mockDockerClient) add(id string, name string) {
+func (m *mockDockerClient) add(id, name string) {
 	m.Lock()
 	defer m.Unlock()
 	m.containers = append(m.containers, dockerclient.APIContainers{ID: id, Names: []string{name}})
@@ -190,7 +188,6 @@ func (m *mockDockerClient) remove(id string) {
 		m.events <- &ev
 	}
 	log.Printf("removed %s", id)
-
 }
 
 func (m *mockDockerClient) ListContainers(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
