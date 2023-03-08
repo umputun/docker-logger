@@ -39,7 +39,8 @@ var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
 func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern string) (*EventNotif, error) {
-	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v", excludes, includes, includesPattern, excludesPattern)
+	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v",
+		excludes, includes, includesPattern, excludesPattern)
 
 	var err error
 	var includesRe *regexp.Regexp
@@ -50,7 +51,7 @@ func NewEventNotif(dockerClient DockerClient, excludes, includes []string, inclu
 		}
 	}
 
-	var excludesRe *regexp.Regexp = nil
+	var excludesRe *regexp.Regexp
 	if excludesPattern != "" {
 		excludesRe, err = regexp.Compile(excludesPattern)
 		if err != nil {

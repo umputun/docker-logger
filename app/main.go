@@ -37,8 +37,8 @@ type cliOpts struct {
 
 	Excludes        []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Includes        []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
-	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"`
-	ExcludesPattern string   `short:"e" long:"exclude-pattern" env:"EXCLUDE_PATTERN" env-delim:"," description:"excluded container names regex pattern"`
+	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"` //nolint:lll
+	ExcludesPattern string   `short:"e" long:"exclude-pattern" env:"EXCLUDE_PATTERN" env-delim:"," description:"excluded container names regex pattern"` //nolint:lll
 	ExtJSON         bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
 	Dbg             bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
