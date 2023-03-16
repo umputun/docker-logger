@@ -36,7 +36,7 @@ func Test_makeLogWriters(t *testing.T) {
 	setupLog(true)
 
 	opts := cliOpts{FilesLocation: "/tmp/logger.test", EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10}
-	stdWr, errWr := makeLogWriters(&opts, "container1", "gr1")
+	stdWr, errWr := makeLogWriters(&opts, "container1", "container1", "gr1")
 	assert.NotEqual(t, stdWr, errWr, "different writers for out and err")
 
 	// write to out writer
@@ -63,12 +63,49 @@ func Test_makeLogWriters(t *testing.T) {
 	assert.NoError(t, errWr.Close())
 }
 
+func Test_makeLogWritersToTheSameFile(t *testing.T) {
+	defer os.RemoveAll("/tmp/logger.test") // nolint
+	setupLog(true)
+
+	// test with excluded postfix number after underscore
+	opts := cliOpts{FilesLocation: "/tmp/logger.test", EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10}
+	stdWr, errWr := makeLogWriters(&opts, "container1_1", "container1", "gr1")
+	assert.NotEqual(t, stdWr, errWr, "different writers for out and err")
+	stdWr2, errWr2 := makeLogWriters(&opts, "container1_2", "container1", "gr1")
+	assert.NotEqual(t, stdWr2, errWr2, "different writers for out and err")
+
+	// write to out writers
+	_, err := stdWr.Write([]byte("abc line 1 from container 1\n"))
+	assert.NoError(t, err)
+	_, err = stdWr2.Write([]byte("abc line 2 from container 2\n"))
+	assert.NoError(t, err)
+
+	// write to err writers
+	_, err = errWr.Write([]byte("err line 1 from container 1\n"))
+	assert.NoError(t, err)
+	_, err = errWr2.Write([]byte("err line 2 from container 2\n"))
+	assert.NoError(t, err)
+
+	r, err := os.ReadFile("/tmp/logger.test/gr1/container1.log")
+	assert.NoError(t, err)
+	assert.Equal(t, "abc line 1 from container 1\nabc line 2 from container 2\n", string(r))
+
+	r, err = os.ReadFile("/tmp/logger.test/gr1/container1.err")
+	assert.NoError(t, err)
+	assert.Equal(t, "err line 1 from container 1\nerr line 2 from container 2\n", string(r))
+
+	assert.NoError(t, stdWr.Close())
+	assert.NoError(t, stdWr2.Close())
+	assert.NoError(t, errWr.Close())
+	assert.NoError(t, errWr2.Close())
+}
+
 func Test_makeLogWritersMixed(t *testing.T) {
 	defer os.RemoveAll("/tmp/logger.test") // nolint
 	setupLog(false)
 
 	opts := cliOpts{FilesLocation: "/tmp/logger.test", EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10, MixErr: true}
-	stdWr, errWr := makeLogWriters(&opts, "container1", "gr1")
+	stdWr, errWr := makeLogWriters(&opts, "container1", "container1", "gr1")
 	assert.Equal(t, stdWr, errWr, "same writer for out and err in mixed mode")
 
 	// write to out writer
@@ -94,7 +131,7 @@ func Test_makeLogWritersMixed(t *testing.T) {
 func Test_makeLogWritersWithJSON(t *testing.T) {
 	defer os.RemoveAll("/tmp/logger.test") // nolint
 	opts := cliOpts{FilesLocation: "/tmp/logger.test", EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10, ExtJSON: true}
-	stdWr, errWr := makeLogWriters(&opts, "container1", "gr1")
+	stdWr, errWr := makeLogWriters(&opts, "container1", "container1", "gr1")
 
 	// write to out writer
 	_, err := stdWr.Write([]byte("abc line 1"))
@@ -113,7 +150,7 @@ func Test_makeLogWritersWithJSON(t *testing.T) {
 
 func Test_makeLogWritersSyslogFailed(t *testing.T) {
 	opts := cliOpts{EnableSyslog: true}
-	stdWr, errWr := makeLogWriters(&opts, "container1", "gr1")
+	stdWr, errWr := makeLogWriters(&opts, "container1", "container1", "gr1")
 	assert.Equal(t, stdWr, errWr, "same writer for out and err in syslog")
 	// write to out writer
 	_, err := stdWr.Write([]byte("abc line 1\n"))
@@ -130,7 +167,7 @@ func Test_makeLogWritersSyslogFailed(t *testing.T) {
 
 func Test_makeLogWritersSyslogPassed(t *testing.T) {
 	opts := cliOpts{EnableSyslog: true, SyslogHost: "127.0.0.1:514", SyslogPrefix: "docker/"}
-	stdWr, errWr := makeLogWriters(&opts, "container1", "gr1")
+	stdWr, errWr := makeLogWriters(&opts, "container1", "container1", "gr1")
 	assert.Equal(t, stdWr, errWr, "same writer for out and err in syslog")
 
 	// write to out writer

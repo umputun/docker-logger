@@ -12,12 +12,13 @@ import (
 
 // EventNotif emits all changes from all containers states
 type EventNotif struct {
-	dockerClient   DockerClient
-	excludes       []string
-	includes       []string
-	includesRegexp *regexp.Regexp
-	excludesRegexp *regexp.Regexp
-	eventsCh       chan Event
+	dockerClient         DockerClient
+	excludes             []string
+	includes             []string
+	includesRegexp       *regexp.Regexp
+	excludesRegexp       *regexp.Regexp
+	postfixPatternRegexp *regexp.Regexp
+	eventsCh             chan Event
 }
 
 // Event is simplified docker.APIEvents for containers only, exposed to caller
@@ -27,6 +28,7 @@ type Event struct {
 	Group         string // group is the "path" part of the image tag, i.e. for umputun/system/logger:latest it will be "system"
 	TS            time.Time
 	Status        bool
+	FileName      string
 }
 
 // DockerClient defines interface listing containers and subscribing to events
@@ -38,7 +40,7 @@ type DockerClient interface {
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern string) (*EventNotif, error) {
+func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern, postfixPattern string) (*EventNotif, error) {
 	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v",
 		excludes, includes, includesPattern, excludesPattern)
 
@@ -59,13 +61,22 @@ func NewEventNotif(dockerClient DockerClient, excludes, includes []string, inclu
 		}
 	}
 
+	var postfixPatternRe *regexp.Regexp
+	if postfixPattern != "" {
+		postfixPatternRe, err = regexp.Compile(postfixPattern)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to compile postfix number regexp")
+		}
+	}
+
 	res := EventNotif{
-		dockerClient:   dockerClient,
-		excludes:       excludes,
-		includes:       includes,
-		includesRegexp: includesRe,
-		excludesRegexp: excludesRe,
-		eventsCh:       make(chan Event, 100),
+		dockerClient:         dockerClient,
+		excludes:             excludes,
+		includes:             includes,
+		includesRegexp:       includesRe,
+		excludesRegexp:       excludesRe,
+		postfixPatternRegexp: postfixPatternRe,
+		eventsCh:             make(chan Event, 100),
 	}
 
 	// first get all currently running containers
@@ -119,6 +130,7 @@ func (e *EventNotif) activate(client DockerClient) {
 			Status:        contains(dockerEvent.Status, upStatuses),
 			TS:            time.Unix(dockerEvent.Time/1000, dockerEvent.TimeNano),
 			Group:         e.group(dockerEvent.From),
+			FileName:      e.formatFileName(containerName),
 		}
 		log.Printf("[INFO] new event %+v", event)
 		e.eventsCh <- event
@@ -146,6 +158,7 @@ func (e *EventNotif) emitRunningContainers() error {
 			ContainerID:   c.ID,
 			TS:            time.Unix(c.Created/1000, 0),
 			Group:         e.group(c.Image),
+			FileName:      e.formatFileName(containerName),
 		}
 		log.Printf("[DEBUG] running container added, %+v", event)
 		e.eventsCh <- event
@@ -177,6 +190,13 @@ func (e *EventNotif) isAllowed(containerName string) bool {
 	}
 
 	return true
+}
+
+func (e *EventNotif) formatFileName(containerName string) string {
+	if e.postfixPatternRegexp != nil {
+		return e.postfixPatternRegexp.ReplaceAllString(containerName, "")
+	}
+	return containerName
 }
 
 func contains(e string, s []string) bool {
