@@ -28,12 +28,13 @@ type cliOpts struct {
 	SyslogHost   string `long:"syslog-host" env:"SYSLOG_HOST" default:"127.0.0.1:514" description:"syslog host"`
 	SyslogPrefix string `long:"syslog-prefix" env:"SYSLOG_PREFIX" default:"docker/" description:"syslog prefix"`
 
-	EnableFiles   bool   `long:"files" env:"LOG_FILES" description:"enable logging to files"`
-	MaxFileSize   int    `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
-	MaxFilesCount int    `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
-	MaxFilesAge   int    `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
-	MixErr        bool   `long:"mix-err" env:"MIX_ERR" description:"send error to std output log file"`
-	FilesLocation string `long:"loc" env:"LOG_FILES_LOC" default:"logs" description:"log files locations"`
+	EnableFiles               bool   `long:"files" env:"LOG_FILES" description:"enable logging to files"`
+	MaxFileSize               int    `long:"max-size" env:"MAX_SIZE" default:"10" description:"size of log triggering rotation (MB)"`
+	MaxFilesCount             int    `long:"max-files" env:"MAX_FILES" default:"5" description:"number of rotated files to retain"`
+	MaxFilesAge               int    `long:"max-age" env:"MAX_AGE" default:"30" description:"maximum number of days to retain"`
+	MixErr                    bool   `long:"mix-err" env:"MIX_ERR" description:"send error to std output log file"`
+	FilesLocation             string `long:"loc" env:"LOG_FILES_LOC" default:"logs" description:"log files locations"`
+	FilePostfixExcludePattern string `long:"exclude-postfix" env:"FILE_POSTFIX_EXCLUDE_PATTERN" default:"" description:"exclude postfix from log file names with regexp pattern"` //nolint:lll
 
 	Excludes        []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Includes        []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
@@ -96,6 +97,17 @@ func do(ctx context.Context, opts *cliOpts) error {
 		}
 	}
 
+	if opts.FilePostfixExcludePattern != "" {
+		if opts.EnableFiles {
+			_, err := regexp.Compile(opts.FilePostfixExcludePattern)
+			if err != nil {
+				return errors.New("could not parse FilePostfixExcludePattern")
+			}
+		} else {
+			return errors.New("FilePostfixExcludePattern is only allowed when logging to files")
+		}
+	}
+
 	if opts.EnableSyslog && !syslog.IsSupported() {
 		return errors.New("syslog is not supported on this OS")
 	}
@@ -105,7 +117,8 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.Wrapf(err, "failed to make docker client %s", err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern)
+	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern,
+		opts.FilePostfixExcludePattern)
 	if err != nil {
 		return errors.Wrap(err, "failed to make event notifier")
 	}
@@ -127,7 +140,7 @@ func runEventLoop(ctx context.Context, opts *cliOpts, events *discovery.EventNot
 				return
 			}
 
-			logWriter, errWriter := makeLogWriters(opts, event.ContainerName, event.Group)
+			logWriter, errWriter := makeLogWriters(opts, event.ContainerName, event.FileName, event.Group)
 			ls := logger.LogStreamer{
 				DockerClient:  client,
 				ContainerID:   event.ContainerID,
@@ -183,7 +196,7 @@ func runEventLoop(ctx context.Context, opts *cliOpts, events *discovery.EventNot
 // makeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
 //
 //nolint:funlen
-func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errWriter io.WriteCloser) {
+func makeLogWriters(opts *cliOpts, containerName, fileName, group string) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s", strings.TrimPrefix(group+"/"+containerName, "/"))
 	if !opts.EnableFiles && !opts.EnableSyslog {
 		log.Fatalf("[ERROR] either files or syslog has to be enabled")
@@ -201,7 +214,7 @@ func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errW
 			log.Fatalf("[ERROR] can't make directory %s, %v", logDir, err)
 		}
 
-		logName := fmt.Sprintf("%s/%s.log", logDir, containerName)
+		logName := fmt.Sprintf("%s/%s.log", logDir, fileName)
 		logFileWriter := &lumberjack.Logger{
 			Filename:   logName,
 			MaxSize:    opts.MaxFileSize, // megabytes
@@ -215,7 +228,7 @@ func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errW
 		errFname := logName
 
 		if !opts.MixErr { // if writers not mixed make error writer
-			errFname = fmt.Sprintf("%s/%s.err", logDir, containerName)
+			errFname = fmt.Sprintf("%s/%s.err", logDir, fileName)
 			errFileWriter = &lumberjack.Logger{
 				Filename:   errFname,
 				MaxSize:    opts.MaxFileSize, // megabytes
