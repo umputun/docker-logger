@@ -117,7 +117,8 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.Wrapf(err, "failed to make docker client %s", err)
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern, opts.FilePostfixExcludePattern)
+	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern,
+		opts.FilePostfixExcludePattern)
 	if err != nil {
 		return errors.Wrap(err, "failed to make event notifier")
 	}

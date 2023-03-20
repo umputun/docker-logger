@@ -40,7 +40,8 @@ type DockerClient interface {
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern, postfixPattern string) (*EventNotif, error) {
+func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern,
+	postfixPattern string) (*EventNotif, error) {
 	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v",
 		excludes, includes, includesPattern, excludesPattern)
 
