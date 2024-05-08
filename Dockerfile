@@ -4,7 +4,6 @@ ARG GIT_BRANCH
 ARG GITHUB_SHA
 ARG CI
 
-ENV GOFLAGS="-mod=vendor"
 ENV CGO_ENABLED=0
 
 ADD . /build
@@ -18,8 +17,10 @@ RUN \
     cd app && go build -o /build/docker-logger -ldflags "-X main.revision=${version} -s -w"
 
 
-
 FROM umputun/baseimage:app-latest
+
+# enables automatic changelog generation by tools like Dependabot
+LABEL org.opencontainers.image.source="https://github.com/umputun/docker-logger"
 
 COPY --from=build /build/docker-logger /srv/docker-logger
 RUN \
