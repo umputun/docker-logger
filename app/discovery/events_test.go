@@ -201,7 +201,7 @@ func (m *mockDockerClient) remove(id string) {
 	log.Printf("removed %s", id)
 }
 
-func (m *mockDockerClient) ListContainers(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+func (m *mockDockerClient) ListContainers(dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 	m.Lock()
 	defer m.Unlock()
 	return m.containers, nil
