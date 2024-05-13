@@ -18,8 +18,6 @@ RUN \
 
 
 FROM umputun/baseimage:app-latest
-
-# enables automatic changelog generation by tools like Dependabot
 LABEL org.opencontainers.image.source="https://github.com/umputun/docker-logger"
 
 COPY --from=build /build/docker-logger /srv/docker-logger
