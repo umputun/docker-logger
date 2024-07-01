@@ -6,7 +6,7 @@ require (
 	github.com/fsouza/go-dockerclient v1.11.0
 	github.com/go-pkgz/lgr v0.11.1
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/jessevdk/go-flags v1.5.0
+	github.com/jessevdk/go-flags v1.6.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -36,7 +36,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.1 // indirect
