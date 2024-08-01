@@ -3,7 +3,7 @@ module github.com/umputun/docker-logger
 go 1.22
 
 require (
-	github.com/fsouza/go-dockerclient v1.11.1
+	github.com/fsouza/go-dockerclient v1.11.2
 	github.com/go-pkgz/lgr v0.11.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jessevdk/go-flags v1.6.1
@@ -18,7 +18,7 @@ require (
 	github.com/containerd/containerd v1.7.16 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/docker/docker v27.1.0+incompatible // indirect
+	github.com/docker/docker v27.1.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
