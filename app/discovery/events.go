@@ -136,6 +136,10 @@ func (e *EventNotif) emitRunningContainers() error {
 
 	for _, c := range containers {
 		containerName := strings.TrimPrefix(c.Names[0], "/")
+		if taskID, ok := c.Labels["com.docker.swarm.task.id"]; ok && taskID != "" {
+			containerName = strings.Replace(containerName, "."+taskID, "", -1)
+			log.Printf("[INFO] Container %+s is part of swarm. so use this name %+s", strings.TrimPrefix(c.Names[0], "/"), containerName)
+		}
 		if !e.isAllowed(containerName) {
 			log.Printf("[INFO] container %s excluded", containerName)
 			continue
