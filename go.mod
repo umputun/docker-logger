@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/fsouza/go-dockerclient v1.12.0
-	github.com/go-pkgz/lgr v0.11.1
+	github.com/go-pkgz/lgr v0.12.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/pkg/errors v0.9.1
