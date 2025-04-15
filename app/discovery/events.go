@@ -36,6 +36,7 @@ type DockerClient interface {
 }
 
 var reGroup = regexp.MustCompile(`/(.*?)/`)
+var reSwarm = regexp.MustCompile(`(?m)(.*)\.(\d+)\.(.*)`)
 
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
 func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern string) (*EventNotif, error) {
@@ -106,8 +107,8 @@ func (e *EventNotif) activate(client DockerClient) {
 		}
 
 		log.Printf("[DEBUG] api event %+v", dockerEvent)
-		containerName := strings.TrimPrefix(dockerEvent.Actor.Attributes["name"], "/")
-
+		containerName := buildContainerName(dockerEvent.Actor.Attributes, strings.TrimPrefix(dockerEvent.Actor.Attributes["name"], "/"))
+		groupName := buildGroupName(dockerEvent.Actor.Attributes, e.group(dockerEvent.From))
 		if !e.isAllowed(containerName) {
 			log.Printf("[INFO] container %s excluded", containerName)
 			continue
@@ -118,7 +119,7 @@ func (e *EventNotif) activate(client DockerClient) {
 			ContainerName: containerName,
 			Status:        contains(dockerEvent.Status, upStatuses),
 			TS:            time.Unix(dockerEvent.Time/1000, dockerEvent.TimeNano),
-			Group:         e.group(dockerEvent.From),
+			Group:         groupName,
 		}
 		log.Printf("[INFO] new event %+v", event)
 		e.eventsCh <- event
@@ -135,7 +136,8 @@ func (e *EventNotif) emitRunningContainers() error {
 	log.Printf("[DEBUG] total containers = %d", len(containers))
 
 	for _, c := range containers {
-		containerName := strings.TrimPrefix(c.Names[0], "/")
+		containerName := buildContainerName(c.Labels, strings.TrimPrefix(c.Names[0], "/"))
+		groupName := buildGroupName(c.Labels, e.group(c.Image))
 		if !e.isAllowed(containerName) {
 			log.Printf("[INFO] container %s excluded", containerName)
 			continue
@@ -145,7 +147,7 @@ func (e *EventNotif) emitRunningContainers() error {
 			ContainerName: containerName,
 			ContainerID:   c.ID,
 			TS:            time.Unix(c.Created/1000, 0),
-			Group:         e.group(c.Image),
+			Group:         groupName,
 		}
 		log.Printf("[DEBUG] running container added, %+v", event)
 		e.eventsCh <- event
@@ -186,4 +188,26 @@ func contains(e string, s []string) bool {
 		}
 	}
 	return false
+}
+
+func buildContainerName(labels map[string]string, containerName string) string {
+	result := []string{}
+	if r := reSwarm.FindStringSubmatch(containerName); len(r) == 4 {
+		result = append(result, r[1]) // service name
+		result = append(result, r[2]) // replica number
+	} else if labelName, ok := labels["logger.container.name"]; ok && labelName != "" {
+		result = append(result, labelName)
+	}
+	if len(result) > 0 {
+		return strings.Join(result, "-")
+	}
+	return containerName
+}
+
+func buildGroupName(labels map[string]string, defaultValue string) string {
+	if labelGroup, ok := labels["logger.group.name"]; ok && labelGroup != "" {
+		return labelGroup
+	}
+
+	return defaultValue
 }
