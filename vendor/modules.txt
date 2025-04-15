@@ -47,8 +47,8 @@ github.com/docker/go-units
 # github.com/fsouza/go-dockerclient v1.12.0
 ## explicit; go 1.22
 github.com/fsouza/go-dockerclient
-# github.com/go-pkgz/lgr v0.11.1
-## explicit; go 1.20
+# github.com/go-pkgz/lgr v0.12.0
+## explicit; go 1.21
 github.com/go-pkgz/lgr
 # github.com/gogo/protobuf v1.3.2
 ## explicit; go 1.15
