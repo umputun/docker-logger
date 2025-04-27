@@ -1,10 +1,11 @@
-FROM umputun/baseimage:buildgo-latest as build
+FROM umputun/baseimage:buildgo-latest AS build
 
 ARG GIT_BRANCH
 ARG GITHUB_SHA
 ARG CI
 
 ENV CGO_ENABLED=0
+
 
 ADD . /build
 WORKDIR /build
@@ -19,7 +20,7 @@ RUN \
 
 FROM umputun/baseimage:app-latest
 LABEL org.opencontainers.image.source="https://github.com/umputun/docker-logger"
-
+ENV APP_UID=995
 COPY --from=build /build/docker-logger /srv/docker-logger
 RUN \
     chown -R app:app /srv && \
