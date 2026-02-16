@@ -1,11 +1,12 @@
 module github.com/umputun/docker-logger
 
-go 1.22
+go 1.23
+
 toolchain go1.24.1
 
 require (
 	github.com/fsouza/go-dockerclient v1.12.1
-	github.com/go-pkgz/lgr v0.11.1
+	github.com/go-pkgz/lgr v0.12.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/pkg/errors v0.9.1
