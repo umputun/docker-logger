@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -28,6 +29,8 @@ type Event struct {
 	TS            time.Time
 	Status        bool
 }
+
+//go:generate moq -out mocks/docker_client.go -pkg mocks -skip-ensure -fmt goimports . DockerClient
 
 // DockerClient defines interface listing containers and subscribing to events
 type DockerClient interface {
@@ -101,7 +104,7 @@ func (e *EventNotif) activate(client DockerClient) {
 			continue
 		}
 
-		if !contains(dockerEvent.Status, upStatuses) && !contains(dockerEvent.Status, downStatuses) {
+		if !slices.Contains(upStatuses, dockerEvent.Status) && !slices.Contains(downStatuses, dockerEvent.Status) {
 			continue
 		}
 
@@ -116,7 +119,7 @@ func (e *EventNotif) activate(client DockerClient) {
 		event := Event{
 			ContainerID:   dockerEvent.Actor.ID,
 			ContainerName: containerName,
-			Status:        contains(dockerEvent.Status, upStatuses),
+			Status:        slices.Contains(upStatuses, dockerEvent.Status),
 			TS:            time.Unix(dockerEvent.Time/1000, dockerEvent.TimeNano),
 			Group:         e.group(dockerEvent.From),
 		}
@@ -170,20 +173,11 @@ func (e *EventNotif) isAllowed(containerName string) bool {
 		return !e.excludesRegexp.MatchString(containerName)
 	}
 	if len(e.includes) > 0 {
-		return contains(containerName, e.includes)
+		return slices.Contains(e.includes, containerName)
 	}
-	if contains(containerName, e.excludes) {
+	if slices.Contains(e.excludes, containerName) {
 		return false
 	}
 
 	return true
-}
-
-func contains(e string, s []string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
 }

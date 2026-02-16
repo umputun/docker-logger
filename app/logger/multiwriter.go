@@ -79,7 +79,7 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 func (w *MultiWriter) Close() error {
 	errs := new(multierror.Error)
 	for _, w := range w.writers {
-		errs = multierror.Append(w.Close())
+		errs = multierror.Append(errs, w.Close())
 	}
 	return errs.ErrorOrNil()
 }

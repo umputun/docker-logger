@@ -10,6 +10,8 @@ import (
 	log "github.com/go-pkgz/lgr"
 )
 
+//go:generate moq -out mocks/log_client.go -pkg mocks -skip-ensure -fmt goimports . LogClient
+
 // LogClient wraps DockerClient with the minimal interface
 type LogClient interface {
 	Logs(docker.LogsOptions) error

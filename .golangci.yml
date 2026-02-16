@@ -1,97 +1,105 @@
-linters-settings:
-  govet:
-    enable:
-      - shadow
-  gocyclo:
-    min-complexity: 15
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  misspell:
-    locale: US
-  lll:
-    line-length: 140
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - rangeValCopy
-      - hugeParam
-
+version: "2"
+run:
+  concurrency: 4
 linters:
-  disable-all: true
+  default: none
   enable:
-    - staticcheck
-    - revive
-    - govet
-    - unconvert
-    - gosec
-    - misspell
-    - unparam
-    - typecheck
-    - ineffassign
-    - unused
-    - stylecheck
-    - exportloopref
-    - gocritic
-    - nakedret
-    - gosimple
-    - prealloc
     - bodyclose
-    - goimports
-    - gofmt
-    - gochecknoinits
-    - errcheck
-    - goprintffuncname
-    - lll
-    - dogsled
-    - whitespace
-    - gochecknoglobals
+    - copyloopvar
+    - dupl
     - durationcheck
+    - errcheck
     - errname
     - exhaustive
-    - funlen
+    - gochecknoinits
     - goconst
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - modernize
+    - nakedret
     - nestif
     - nilerr
-    - tenv
+    - prealloc
+    - revive
+    - staticcheck
+    - testifylint
+    - unconvert
+    - unparam
+    - unused
     - usestdlibvars
-  fast: false
-
-
-run:
-  concurrency: 8
-
-issues:
-  exclude-dirs:
-    - vendor
-  exclude-rules:
-    - text: "should have a package comment"
-      linters:
-        - golint
-    - text: "package-comments: should have a package comment"
-      linters:
-        - revive
-    - text: "exitAfterDefer:"
-      linters:
-        - gocritic
-    - text: "whyNoLint: include an explanation for nolint directive"
-      linters:
-        - gocritic
-    - text: "weak cryptographic primitive"
-      linters:
-        - gosec
-    - text: "at least one file in a package should have a package comment"
-      linters:
-        - stylecheck
-  exclude-use-default: false
+    - whitespace
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - hugeParam
+        - rangeValCopy
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    govet:
+      enable:
+        - shadow
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - revive
+        text: "package-comments: should have a package comment"
+      - linters:
+          - staticcheck
+        text: at least one file in a package should have a package comment
+      - linters:
+          - gocritic
+        text: "exitAfterDefer:"
+      - linters:
+          - gocritic
+        text: "whyNoLint: include an explanation for nolint directive"
+      - linters:
+          - gosec
+        text: "weak cryptographic primitive"
+      - linters:
+          - dupl
+          - goconst
+          - usestdlibvars
+        path: _test\.go$
+      - linters:
+          - revive
+          - unparam
+          - unused
+        path: _test\.go$
+        text: unused-parameter
+      - linters:
+          - errcheck
+        text: "Error return value of .*.Close.*is not checked"
+      - linters:
+          - revive
+        path: app/syslog/
+        text: "var-naming: avoid package names that conflict"
+    paths:
+      - vendor
+      - third_party$
+      - builtin$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - third_party$
+      - builtin$

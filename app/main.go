@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"regexp"
 	"strings"
 	"syscall"
 
@@ -37,13 +36,13 @@ type cliOpts struct {
 
 	Excludes        []string `short:"x" long:"exclude" env:"EXCLUDE" env-delim:"," description:"excluded container names"`
 	Includes        []string `short:"i" long:"include" env:"INCLUDE" env-delim:"," description:"included container names"`
-	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"` //nolint:lll
-	ExcludesPattern string   `short:"e" long:"exclude-pattern" env:"EXCLUDE_PATTERN" env-delim:"," description:"excluded container names regex pattern"` //nolint:lll
+	IncludesPattern string   `short:"p" long:"include-pattern" env:"INCLUDE_PATTERN" env-delim:"," description:"included container names regex pattern"`
+	ExcludesPattern string   `short:"e" long:"exclude-pattern" env:"EXCLUDE_PATTERN" env-delim:"," description:"excluded container names regex pattern"`
 	ExtJSON         bool     `short:"j" long:"json" env:"JSON" description:"wrap message with JSON envelope"`
 	Dbg             bool     `long:"dbg" env:"DEBUG" description:"debug mode"`
 }
 
-var revision = "unknown" //nolint:gochecknoglobals
+var revision = "unknown"
 
 func main() {
 	fmt.Printf("docker-logger %s\n", revision)
@@ -74,13 +73,6 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.New("only single option Includes/IncludesPattern are allowed")
 	}
 
-	if opts.IncludesPattern != "" {
-		_, err := regexp.Compile(opts.IncludesPattern)
-		if err != nil {
-			return errors.New("could not parse Includes Pattern")
-		}
-	}
-
 	if opts.Includes != nil && opts.Excludes != nil {
 		return errors.New("only single option Excludes/Includes are allowed")
 	}
@@ -89,20 +81,13 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.New("only single option Excludes/ExcludesPattern are allowed")
 	}
 
-	if opts.ExcludesPattern != "" {
-		_, err := regexp.Compile(opts.ExcludesPattern)
-		if err != nil {
-			return errors.New("could not parse Excludes Pattern")
-		}
-	}
-
 	if opts.EnableSyslog && !syslog.IsSupported() {
 		return errors.New("syslog is not supported on this OS")
 	}
 
 	client, err := docker.NewClient(opts.DockerHost)
 	if err != nil {
-		return errors.Wrapf(err, "failed to make docker client %s", err)
+		return errors.Wrap(err, "failed to make docker client")
 	}
 
 	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern)
@@ -110,13 +95,12 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.Wrap(err, "failed to make event notifier")
 	}
 
-	runEventLoop(ctx, opts, events, client)
+	runEventLoop(ctx, opts, events.Channel(), client)
 	return nil
 }
 
-//nolint:funlen
-func runEventLoop(ctx context.Context, opts *cliOpts, events *discovery.EventNotif, client *docker.Client) {
-	logStreams := map[string]logger.LogStreamer{}
+func runEventLoop(ctx context.Context, opts *cliOpts, eventsCh <-chan discovery.Event, logClient logger.LogClient) {
+	logStreams := map[string]*logger.LogStreamer{}
 
 	procEvent := func(event discovery.Event) {
 		if event.Status {
@@ -128,14 +112,14 @@ func runEventLoop(ctx context.Context, opts *cliOpts, events *discovery.EventNot
 			}
 
 			logWriter, errWriter := makeLogWriters(opts, event.ContainerName, event.Group)
-			ls := logger.LogStreamer{
-				DockerClient:  client,
+			ls := &logger.LogStreamer{
+				DockerClient:  logClient,
 				ContainerID:   event.ContainerID,
 				ContainerName: event.ContainerName,
 				LogWriter:     logWriter,
 				ErrWriter:     errWriter,
 			}
-			ls = *ls.Go(ctx)
+			ls.Go(ctx)
 			logStreams[event.ContainerID] = ls
 			log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
 			return
@@ -170,19 +154,25 @@ func runEventLoop(ctx context.Context, opts *cliOpts, events *discovery.EventNot
 			log.Print("[WARN] event loop terminated")
 			for _, v := range logStreams {
 				v.Close()
+				if e := v.LogWriter.Close(); e != nil {
+					log.Printf("[WARN] failed to close log writer for %s, %s", v.ContainerName, e)
+				}
+				if !opts.MixErr {
+					if e := v.ErrWriter.Close(); e != nil {
+						log.Printf("[WARN] failed to close err writer for %s, %s", v.ContainerName, e)
+					}
+				}
 				log.Printf("[INFO] close logger stream for %s", v.ContainerName)
 			}
 			return
-		case event := <-events.Channel():
+		case event := <-eventsCh:
 			log.Printf("[DEBUG] received event %+v", event)
 			procEvent(event)
 		}
 	}
 }
 
-// makeLogWriters creates io.Writer with rotated out and separate err files. Also adds writer for remote syslog
-//
-//nolint:funlen
+// makeLogWriters creates io.WriteCloser with rotated out and separate err files. Also adds writer for remote syslog
 func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errWriter io.WriteCloser) {
 	log.Printf("[DEBUG] create log writer for %s", strings.TrimPrefix(group+"/"+containerName, "/"))
 	if !opts.EnableFiles && !opts.EnableSyslog {
