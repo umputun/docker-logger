@@ -1,96 +1,299 @@
 package discovery
 
 import (
-	"sync"
+	"errors"
 	"testing"
-	"time"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
-	log "github.com/go-pkgz/lgr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/docker-logger/app/discovery/mocks"
 )
 
+// makeListenerMock creates a mock with a synchronized event listener channel.
+// returns the mock and a function to get the event channel (blocks until ready).
+func makeListenerMock() (
+	dMock *mocks.DockerClientMock, getEventsCh func() chan<- *dockerclient.APIEvents,
+) {
+	ready := make(chan chan<- *dockerclient.APIEvents, 1)
+	dMock = &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			ready <- listener
+			return nil
+		},
+	}
+	return dMock, func() chan<- *dockerclient.APIEvents { return <-ready }
+}
+
 func TestEvents(t *testing.T) {
-	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "", "")
+	mock, getEventsCh := makeListenerMock()
+
+	events, err := NewEventNotif(mock, []string{"tst_exclude"}, []string{}, "", "")
 	require.NoError(t, err)
-	time.Sleep(10 * time.Millisecond)
-	go client.add("id1", "name1")
+	eventsCh := getEventsCh()
 
-	ev := <-events.Channel()
-	assert.Equal(t, "name1", ev.ContainerName)
-	assert.Equal(t, true, ev.Status, "started")
+	// send start event
+	ev := &dockerclient.APIEvents{Type: "container", Status: "start"}
+	ev.Actor.Attributes = map[string]string{"name": "name1"}
+	ev.Actor.ID = "id1"
+	eventsCh <- ev
 
-	go client.remove("id1")
-	ev = <-events.Channel()
-	assert.Equal(t, "id1", ev.ContainerID)
-	assert.Equal(t, false, ev.Status, "stopped")
+	received := <-events.Channel()
+	assert.Equal(t, "name1", received.ContainerName)
+	assert.True(t, received.Status, "started")
+
+	// send stop event
+	ev = &dockerclient.APIEvents{Type: "container", ID: "id1", Status: "stop"}
+	ev.Actor.Attributes = map[string]string{"name": "name1"}
+	ev.Actor.ID = "id1"
+	eventsCh <- ev
+
+	received = <-events.Channel()
+	assert.Equal(t, "id1", received.ContainerID)
+	assert.False(t, received.Status, "stopped")
+
+	assert.Len(t, mock.AddEventListenerCalls(), 1)
+	assert.Len(t, mock.ListContainersCalls(), 1)
 }
 
 func TestEventsIncludes(t *testing.T) {
-	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{}, []string{"tst_included"}, "", "")
+	mock, getEventsCh := makeListenerMock()
+
+	events, err := NewEventNotif(mock, []string{}, []string{"tst_included"}, "", "")
 	require.NoError(t, err)
-	time.Sleep(10 * time.Millisecond)
-	go client.add("id2", "tst_included")
+	eventsCh := getEventsCh()
 
-	ev := <-events.Channel()
-	assert.Equal(t, "tst_included", ev.ContainerName)
-	assert.Equal(t, true, ev.Status, "started")
+	ev := &dockerclient.APIEvents{Type: "container", Status: "start"}
+	ev.Actor.Attributes = map[string]string{"name": "tst_included"}
+	ev.Actor.ID = "id2"
+	eventsCh <- ev
 
-	go client.remove("id2")
-	ev = <-events.Channel()
-	assert.Equal(t, "id2", ev.ContainerID)
-	assert.Equal(t, false, ev.Status, "stopped")
+	received := <-events.Channel()
+	assert.Equal(t, "tst_included", received.ContainerName)
+	assert.True(t, received.Status, "started")
+
+	// send stop
+	ev = &dockerclient.APIEvents{Type: "container", Status: "stop"}
+	ev.Actor.Attributes = map[string]string{"name": "tst_included"}
+	ev.Actor.ID = "id2"
+	eventsCh <- ev
+
+	received = <-events.Channel()
+	assert.Equal(t, "id2", received.ContainerID)
+	assert.False(t, received.Status, "stopped")
 }
 
 func TestEmit(t *testing.T) {
-	client := &mockDockerClient{}
-	time.Sleep(10 * time.Millisecond)
+	containers := []dockerclient.APIContainers{
+		{ID: "id1", Names: []string{"name1"}, Image: "docker.umputun.com/group1/img:latest"},
+		{ID: "id2", Names: []string{"tst_exclude"}, Image: "img:latest"},
+		{ID: "id3", Names: []string{"name2"}, Image: "docker.umputun.com/group2/img:latest"},
+	}
 
-	client.add("id1", "name1")
-	client.add("id2", "tst_exclude")
-	client.add("id2", "name2")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return containers, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
 
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, []string{}, "", "")
+	events, err := NewEventNotif(mock, []string{"tst_exclude"}, []string{}, "", "")
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
 	assert.Equal(t, "name1", ev.ContainerName)
-	assert.Equal(t, true, ev.Status, "started")
+	assert.True(t, ev.Status, "started")
+	assert.Equal(t, "group1", ev.Group)
 
 	ev = <-events.Channel()
 	assert.Equal(t, "name2", ev.ContainerName)
-	assert.Equal(t, true, ev.Status, "started")
+	assert.True(t, ev.Status, "started")
+	assert.Equal(t, "group2", ev.Group)
 }
 
 func TestEmitIncludes(t *testing.T) {
-	client := &mockDockerClient{}
-	time.Sleep(10 * time.Millisecond)
+	containers := []dockerclient.APIContainers{
+		{ID: "id1", Names: []string{"name1"}, Image: "img:latest"},
+		{ID: "id2", Names: []string{"tst_include"}, Image: "img:latest"},
+		{ID: "id3", Names: []string{"name2"}, Image: "img:latest"},
+	}
 
-	client.add("id1", "name1")
-	client.add("id2", "tst_include")
-	client.add("id2", "name2")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return containers, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
 
-	events, err := NewEventNotif(client, []string{}, []string{"tst_include"}, "", "")
+	events, err := NewEventNotif(mock, []string{}, []string{"tst_include"}, "", "")
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
 	assert.Equal(t, "tst_include", ev.ContainerName)
-	assert.Equal(t, true, ev.Status, "started")
+	assert.True(t, ev.Status, "started")
 }
 
 func TestNewEventNotifWithNils(t *testing.T) {
-	client := &mockDockerClient{}
-
-	_, err := NewEventNotif(client, nil, nil, "", "")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+	_, err := NewEventNotif(mock, nil, nil, "", "")
 	require.NoError(t, err)
 }
 
+func TestNewEventNotifInvalidIncludesPattern(t *testing.T) {
+	mock := &mocks.DockerClientMock{}
+	_, err := NewEventNotif(mock, nil, nil, "[invalid", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to compile includesPattern")
+}
+
+func TestNewEventNotifInvalidExcludesPattern(t *testing.T) {
+	mock := &mocks.DockerClientMock{}
+	_, err := NewEventNotif(mock, nil, nil, "", "[invalid")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to compile excludesPattern")
+}
+
+func TestNewEventNotifListContainersError(t *testing.T) {
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, errors.New("connection refused")
+		},
+	}
+	_, err := NewEventNotif(mock, nil, nil, "", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to emit containers")
+}
+
+func TestActivateFiltersNonContainerEvents(t *testing.T) {
+	mock, getEventsCh := makeListenerMock()
+
+	events, err := NewEventNotif(mock, nil, nil, "", "")
+	require.NoError(t, err)
+	eventsCh := getEventsCh()
+
+	// send non-container event (should be filtered)
+	eventsCh <- &dockerclient.APIEvents{Type: "image", Status: "pull"}
+
+	// send irrelevant container status (should be filtered)
+	ev := &dockerclient.APIEvents{Type: "container", Status: "exec_start"}
+	ev.Actor.Attributes = map[string]string{"name": "test"}
+	ev.Actor.ID = "id1"
+	eventsCh <- ev
+
+	// send valid container start (should pass through)
+	ev = &dockerclient.APIEvents{Type: "container", Status: "start"}
+	ev.Actor.Attributes = map[string]string{"name": "valid"}
+	ev.Actor.ID = "id2"
+	eventsCh <- ev
+
+	received := <-events.Channel()
+	assert.Equal(t, "valid", received.ContainerName, "only valid container events should pass")
+	assert.True(t, received.Status)
+}
+
+func TestActivateExcludedContainerFiltered(t *testing.T) {
+	ready := make(chan chan<- *dockerclient.APIEvents, 1)
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			ready <- listener
+			return nil
+		},
+	}
+
+	events, err := NewEventNotif(mock, []string{"excluded"}, nil, "", "")
+	require.NoError(t, err)
+	eventsCh := <-ready
+
+	// send excluded container event
+	ev := &dockerclient.APIEvents{Type: "container", Status: "start"}
+	ev.Actor.Attributes = map[string]string{"name": "excluded"}
+	ev.Actor.ID = "id1"
+	eventsCh <- ev
+
+	// send allowed container event
+	ev = &dockerclient.APIEvents{Type: "container", Status: "start"}
+	ev.Actor.Attributes = map[string]string{"name": "allowed"}
+	ev.Actor.ID = "id2"
+	eventsCh <- ev
+
+	received := <-events.Channel()
+	assert.Equal(t, "allowed", received.ContainerName, "excluded containers should be filtered")
+}
+
+func TestActivateGroupFromImage(t *testing.T) {
+	mock, getEventsCh := makeListenerMock()
+
+	events, err := NewEventNotif(mock, nil, nil, "", "")
+	require.NoError(t, err)
+	eventsCh := getEventsCh()
+
+	ev := &dockerclient.APIEvents{Type: "container", Status: "start", From: "docker.umputun.com:5500/radio-t/webstats:latest"}
+	ev.Actor.Attributes = map[string]string{"name": "web"}
+	ev.Actor.ID = "id1"
+	eventsCh <- ev
+
+	received := <-events.Channel()
+	assert.Equal(t, "radio-t", received.Group)
+}
+
+func TestActivateAllContainerStatuses(t *testing.T) {
+	mock, getEventsCh := makeListenerMock()
+
+	events, err := NewEventNotif(mock, nil, nil, "", "")
+	require.NoError(t, err)
+	eventsCh := getEventsCh()
+
+	tests := []struct {
+		status   string
+		expected bool
+	}{
+		{"start", true},
+		{"restart", true},
+		{"die", false},
+		{"destroy", false},
+		{"stop", false},
+		{"pause", false},
+	}
+
+	for _, tt := range tests {
+		ev := &dockerclient.APIEvents{Type: "container", Status: tt.status}
+		ev.Actor.Attributes = map[string]string{"name": "c_" + tt.status}
+		ev.Actor.ID = "id_" + tt.status
+		eventsCh <- ev
+
+		received := <-events.Channel()
+		assert.Equal(t, tt.expected, received.Status, "status %s should map to %v", tt.status, tt.expected)
+	}
+}
+
 func TestIsAllowedExclude(t *testing.T) {
-	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, []string{"tst_exclude"}, nil, "", "")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+	events, err := NewEventNotif(mock, []string{"tst_exclude"}, nil, "", "")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("name1"))
@@ -98,8 +301,15 @@ func TestIsAllowedExclude(t *testing.T) {
 }
 
 func TestIsAllowedExcludePattern(t *testing.T) {
-	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, nil, nil, "", "tst_exclude.*")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+	events, err := NewEventNotif(mock, nil, nil, "", "tst_exclude.*")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -109,8 +319,15 @@ func TestIsAllowedExcludePattern(t *testing.T) {
 }
 
 func TestIsAllowedInclude(t *testing.T) {
-	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, nil, []string{"tst_include"}, "", "")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+	events, err := NewEventNotif(mock, nil, []string{"tst_include"}, "", "")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -119,8 +336,15 @@ func TestIsAllowedInclude(t *testing.T) {
 }
 
 func TestIsAllowedIncludePattern(t *testing.T) {
-	client := &mockDockerClient{}
-	events, err := NewEventNotif(client, nil, nil, "tst_include.*", "")
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+	events, err := NewEventNotif(mock, nil, nil, "tst_include.*", "")
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -135,91 +359,13 @@ func TestGroup(t *testing.T) {
 		inp string
 		out string
 	}{
-		{
-			inp: "docker.umputun.com:5500/radio-t/webstats:latest",
-			out: "radio-t",
-		},
-		{
-			inp: "docker.umputun.com/some/webstats",
-			out: "some",
-		},
-		{
-			inp: "docker.umputun.com/some/blah/webstats",
-			out: "some",
-		},
-		{
-			inp: "docker.umputun.com/webstats:xxx",
-			out: "",
-		},
+		{inp: "docker.umputun.com:5500/radio-t/webstats:latest", out: "radio-t"},
+		{inp: "docker.umputun.com/some/webstats", out: "some"},
+		{inp: "docker.umputun.com/some/blah/webstats", out: "some"},
+		{inp: "docker.umputun.com/webstats:xxx", out: ""},
 	}
 
 	for _, tt := range tbl {
 		assert.Equal(t, tt.out, d.group(tt.inp))
 	}
-}
-
-type mockDockerClient struct {
-	containers []dockerclient.APIContainers
-	events     chan<- *dockerclient.APIEvents
-	sync.Mutex
-}
-
-func (m *mockDockerClient) add(id, name string) {
-	m.Lock()
-	defer m.Unlock()
-	m.containers = append(m.containers, dockerclient.APIContainers{ID: id, Names: []string{name}})
-	ev := dockerclient.APIEvents{Type: "container", ID: id, Status: "start"}
-	ev.Actor.Attributes = map[string]string{}
-	ev.Actor.Attributes["name"] = name
-	ev.Actor.ID = id
-	if m.events != nil {
-		m.events <- &ev
-	}
-	log.Printf("added %s", id)
-}
-
-func (m *mockDockerClient) remove(id string) {
-	m.Lock()
-	defer m.Unlock()
-
-	removingContainerName := m.getContainerName(id)
-
-	r := []dockerclient.APIContainers{}
-	for _, c := range m.containers {
-		if c.ID != id {
-			r = append(r, c)
-		}
-	}
-	m.containers = r
-
-	actor := dockerclient.APIActor{ID: id, Attributes: map[string]string{"name": removingContainerName}}
-	ev := dockerclient.APIEvents{Type: "container", ID: id, Status: "stop", Actor: actor}
-	ev.Actor.ID = id
-	if m.events != nil {
-		m.events <- &ev
-	}
-	log.Printf("removed %s", id)
-}
-
-func (m *mockDockerClient) ListContainers(dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
-	m.Lock()
-	defer m.Unlock()
-	return m.containers, nil
-}
-
-func (m *mockDockerClient) AddEventListener(listener chan<- *dockerclient.APIEvents) error {
-	m.Lock()
-	defer m.Unlock()
-	m.events = listener
-	return nil
-}
-
-func (m *mockDockerClient) getContainerName(id string) string {
-	for _, c := range m.containers {
-		if id == c.ID {
-			return c.Names[0]
-		}
-	}
-
-	panic("Can't find container with specified id")
 }
