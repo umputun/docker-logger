@@ -7,7 +7,8 @@ import (
 	"log/syslog"
 )
 
-// GetWriter returns syslog writer for given host and container
+// GetWriter returns syslog writer for given host, prefix and container name.
+// The syslogPrefix is prepended to containerName to form the syslog tag.
 func GetWriter(syslogHost, syslogPrefix, containerName string) (io.WriteCloser, error) {
 	return syslog.Dial("udp4", syslogHost, syslog.LOG_WARNING|syslog.LOG_DAEMON, syslogPrefix+containerName)
 }

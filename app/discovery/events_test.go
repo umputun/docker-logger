@@ -3,6 +3,7 @@ package discovery
 import (
 	"errors"
 	"testing"
+	"time"
 
 	dockerclient "github.com/fsouza/go-dockerclient"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ func makeListenerMock() (
 func TestEvents(t *testing.T) {
 	mock, getEventsCh := makeListenerMock()
 
-	events, err := NewEventNotif(mock, []string{"tst_exclude"}, []string{}, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Excludes: []string{"tst_exclude"}})
 	require.NoError(t, err)
 	eventsCh := getEventsCh()
 
@@ -63,7 +64,7 @@ func TestEvents(t *testing.T) {
 func TestEventsIncludes(t *testing.T) {
 	mock, getEventsCh := makeListenerMock()
 
-	events, err := NewEventNotif(mock, []string{}, []string{"tst_included"}, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Includes: []string{"tst_included"}})
 	require.NoError(t, err)
 	eventsCh := getEventsCh()
 
@@ -88,10 +89,11 @@ func TestEventsIncludes(t *testing.T) {
 }
 
 func TestEmit(t *testing.T) {
+	now := time.Now()
 	containers := []dockerclient.APIContainers{
-		{ID: "id1", Names: []string{"name1"}, Image: "docker.umputun.com/group1/img:latest"},
-		{ID: "id2", Names: []string{"tst_exclude"}, Image: "img:latest"},
-		{ID: "id3", Names: []string{"name2"}, Image: "docker.umputun.com/group2/img:latest"},
+		{ID: "id1", Names: []string{"name1"}, Image: "docker.umputun.com/group1/img:latest", Created: now.Unix()},
+		{ID: "id2", Names: []string{"tst_exclude"}, Image: "img:latest", Created: now.Unix()},
+		{ID: "id3", Names: []string{"name2"}, Image: "docker.umputun.com/group2/img:latest", Created: now.Unix()},
 	}
 
 	mock := &mocks.DockerClientMock{
@@ -103,18 +105,42 @@ func TestEmit(t *testing.T) {
 		},
 	}
 
-	events, err := NewEventNotif(mock, []string{"tst_exclude"}, []string{}, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Excludes: []string{"tst_exclude"}})
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
 	assert.Equal(t, "name1", ev.ContainerName)
 	assert.True(t, ev.Status, "started")
 	assert.Equal(t, "group1", ev.Group)
+	assert.WithinDuration(t, now, ev.TS, time.Second, "timestamp should be close to now")
 
 	ev = <-events.Channel()
 	assert.Equal(t, "name2", ev.ContainerName)
 	assert.True(t, ev.Status, "started")
 	assert.Equal(t, "group2", ev.Group)
+	assert.WithinDuration(t, now, ev.TS, time.Second, "timestamp should be close to now")
+}
+
+func TestEmitSkipsContainersWithNoNames(t *testing.T) {
+	containers := []dockerclient.APIContainers{
+		{ID: "id1", Names: nil, Image: "img:latest"},
+		{ID: "id2", Names: []string{"name2"}, Image: "img:latest", Created: time.Now().Unix()},
+	}
+
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return containers, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+
+	events, err := NewEventNotif(mock, EventNotifOpts{})
+	require.NoError(t, err)
+
+	ev := <-events.Channel()
+	assert.Equal(t, "name2", ev.ContainerName, "container with no names should be skipped")
 }
 
 func TestEmitIncludes(t *testing.T) {
@@ -133,7 +159,7 @@ func TestEmitIncludes(t *testing.T) {
 		},
 	}
 
-	events, err := NewEventNotif(mock, []string{}, []string{"tst_include"}, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Includes: []string{"tst_include"}})
 	require.NoError(t, err)
 
 	ev := <-events.Channel()
@@ -150,20 +176,20 @@ func TestNewEventNotifWithNils(t *testing.T) {
 			return nil
 		},
 	}
-	_, err := NewEventNotif(mock, nil, nil, "", "")
+	_, err := NewEventNotif(mock, EventNotifOpts{})
 	require.NoError(t, err)
 }
 
 func TestNewEventNotifInvalidIncludesPattern(t *testing.T) {
 	mock := &mocks.DockerClientMock{}
-	_, err := NewEventNotif(mock, nil, nil, "[invalid", "")
+	_, err := NewEventNotif(mock, EventNotifOpts{IncludesPattern: "[invalid"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to compile includesPattern")
 }
 
 func TestNewEventNotifInvalidExcludesPattern(t *testing.T) {
 	mock := &mocks.DockerClientMock{}
-	_, err := NewEventNotif(mock, nil, nil, "", "[invalid")
+	_, err := NewEventNotif(mock, EventNotifOpts{ExcludesPattern: "[invalid"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to compile excludesPattern")
 }
@@ -174,7 +200,7 @@ func TestNewEventNotifListContainersError(t *testing.T) {
 			return nil, errors.New("connection refused")
 		},
 	}
-	_, err := NewEventNotif(mock, nil, nil, "", "")
+	_, err := NewEventNotif(mock, EventNotifOpts{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to emit containers")
 }
@@ -182,7 +208,7 @@ func TestNewEventNotifListContainersError(t *testing.T) {
 func TestActivateFiltersNonContainerEvents(t *testing.T) {
 	mock, getEventsCh := makeListenerMock()
 
-	events, err := NewEventNotif(mock, nil, nil, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{})
 	require.NoError(t, err)
 	eventsCh := getEventsCh()
 
@@ -218,7 +244,7 @@ func TestActivateExcludedContainerFiltered(t *testing.T) {
 		},
 	}
 
-	events, err := NewEventNotif(mock, []string{"excluded"}, nil, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Excludes: []string{"excluded"}})
 	require.NoError(t, err)
 	eventsCh := <-ready
 
@@ -241,7 +267,7 @@ func TestActivateExcludedContainerFiltered(t *testing.T) {
 func TestActivateGroupFromImage(t *testing.T) {
 	mock, getEventsCh := makeListenerMock()
 
-	events, err := NewEventNotif(mock, nil, nil, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{})
 	require.NoError(t, err)
 	eventsCh := getEventsCh()
 
@@ -257,7 +283,7 @@ func TestActivateGroupFromImage(t *testing.T) {
 func TestActivateAllContainerStatuses(t *testing.T) {
 	mock, getEventsCh := makeListenerMock()
 
-	events, err := NewEventNotif(mock, nil, nil, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{})
 	require.NoError(t, err)
 	eventsCh := getEventsCh()
 
@@ -284,6 +310,44 @@ func TestActivateAllContainerStatuses(t *testing.T) {
 	}
 }
 
+func TestActivateTimestamp(t *testing.T) {
+	t.Run("with TimeNano", func(t *testing.T) {
+		mock, getEventsCh := makeListenerMock()
+		events, err := NewEventNotif(mock, EventNotifOpts{})
+		require.NoError(t, err)
+		eventsCh := getEventsCh()
+
+		now := time.Now()
+		ev := &dockerclient.APIEvents{Type: "container", Status: "start"}
+		ev.Actor.Attributes = map[string]string{"name": "ts_test"}
+		ev.Actor.ID = "id1"
+		ev.Time = now.Unix()
+		ev.TimeNano = now.UnixNano()
+		eventsCh <- ev
+
+		received := <-events.Channel()
+		assert.WithinDuration(t, now, received.TS, time.Second, "timestamp should use TimeNano precision")
+	})
+
+	t.Run("without TimeNano fallback to Time", func(t *testing.T) {
+		mock, getEventsCh := makeListenerMock()
+		events, err := NewEventNotif(mock, EventNotifOpts{})
+		require.NoError(t, err)
+		eventsCh := getEventsCh()
+
+		now := time.Now()
+		ev := &dockerclient.APIEvents{Type: "container", Status: "start"}
+		ev.Actor.Attributes = map[string]string{"name": "ts_test2"}
+		ev.Actor.ID = "id2"
+		ev.Time = now.Unix()
+		ev.TimeNano = 0 // simulate older Docker API
+		eventsCh <- ev
+
+		received := <-events.Channel()
+		assert.WithinDuration(t, now, received.TS, time.Second, "timestamp should fall back to Time field")
+	})
+}
+
 func TestIsAllowedExclude(t *testing.T) {
 	mock := &mocks.DockerClientMock{
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
@@ -293,7 +357,7 @@ func TestIsAllowedExclude(t *testing.T) {
 			return nil
 		},
 	}
-	events, err := NewEventNotif(mock, []string{"tst_exclude"}, nil, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Excludes: []string{"tst_exclude"}})
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("name1"))
@@ -309,7 +373,7 @@ func TestIsAllowedExcludePattern(t *testing.T) {
 			return nil
 		},
 	}
-	events, err := NewEventNotif(mock, nil, nil, "", "tst_exclude.*")
+	events, err := NewEventNotif(mock, EventNotifOpts{ExcludesPattern: "tst_exclude.*"})
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -327,7 +391,7 @@ func TestIsAllowedInclude(t *testing.T) {
 			return nil
 		},
 	}
-	events, err := NewEventNotif(mock, nil, []string{"tst_include"}, "", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{Includes: []string{"tst_include"}})
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -344,7 +408,7 @@ func TestIsAllowedIncludePattern(t *testing.T) {
 			return nil
 		},
 	}
-	events, err := NewEventNotif(mock, nil, nil, "tst_include.*", "")
+	events, err := NewEventNotif(mock, EventNotifOpts{IncludesPattern: "tst_include.*"})
 	require.NoError(t, err)
 
 	assert.True(t, events.isAllowed("tst_include"))
@@ -368,4 +432,46 @@ func TestGroup(t *testing.T) {
 	for _, tt := range tbl {
 		assert.Equal(t, tt.out, d.group(tt.inp))
 	}
+}
+
+func TestActivateAddEventListenerError(t *testing.T) {
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return errors.New("listener error")
+		},
+	}
+
+	events, err := NewEventNotif(mock, EventNotifOpts{})
+	require.NoError(t, err)
+
+	// eventsCh should be closed because AddEventListener failed
+	_, ok := <-events.Channel()
+	assert.False(t, ok, "events channel should be closed on AddEventListener error")
+}
+
+func TestActivateEventChannelClosed(t *testing.T) {
+	ready := make(chan chan<- *dockerclient.APIEvents, 1)
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return nil, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			ready <- listener
+			return nil
+		},
+	}
+
+	events, err := NewEventNotif(mock, EventNotifOpts{})
+	require.NoError(t, err)
+
+	// close the docker events channel to simulate docker daemon disconnect
+	dockerCh := <-ready
+	close(dockerCh)
+
+	// eventsCh should be closed because the docker events channel was closed
+	_, ok := <-events.Channel()
+	assert.False(t, ok, "events channel should be closed when docker events channel closes")
 }

@@ -65,6 +65,7 @@ func main() {
 	log.Printf("[INFO] options: %+v", opts)
 	if err := do(ctx, &opts); err != nil {
 		log.Printf("[ERROR] failed, %v", err)
+		os.Exit(1)
 	}
 }
 
@@ -81,6 +82,22 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.New("only single option Excludes/ExcludesPattern are allowed")
 	}
 
+	if opts.IncludesPattern != "" && opts.ExcludesPattern != "" {
+		return errors.New("only single option IncludesPattern/ExcludesPattern are allowed")
+	}
+
+	if opts.Includes != nil && opts.ExcludesPattern != "" {
+		return errors.New("only single option Includes/ExcludesPattern are allowed")
+	}
+
+	if opts.IncludesPattern != "" && opts.Excludes != nil {
+		return errors.New("only single option IncludesPattern/Excludes are allowed")
+	}
+
+	if !opts.EnableFiles && !opts.EnableSyslog {
+		return errors.New("at least one log destination must be enabled (files or syslog)")
+	}
+
 	if opts.EnableSyslog && !syslog.IsSupported() {
 		return errors.New("syslog is not supported on this OS")
 	}
@@ -90,16 +107,21 @@ func do(ctx context.Context, opts *cliOpts) error {
 		return errors.Wrap(err, "failed to make docker client")
 	}
 
-	events, err := discovery.NewEventNotif(client, opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern)
+	events, err := discovery.NewEventNotif(client, discovery.EventNotifOpts{
+		Excludes:        opts.Excludes,
+		Includes:        opts.Includes,
+		IncludesPattern: opts.IncludesPattern,
+		ExcludesPattern: opts.ExcludesPattern,
+	})
 	if err != nil {
 		return errors.Wrap(err, "failed to make event notifier")
 	}
 
-	runEventLoop(ctx, opts, events.Channel(), client)
-	return nil
+	return runEventLoop(ctx, opts, events.Channel(), events.Err(), client)
 }
 
-func runEventLoop(ctx context.Context, opts *cliOpts, eventsCh <-chan discovery.Event, logClient logger.LogClient) {
+func runEventLoop(ctx context.Context, opts *cliOpts, eventsCh <-chan discovery.Event,
+	listenerErr <-chan error, logClient logger.LogClient) error {
 	logStreams := map[string]*logger.LogStreamer{}
 
 	procEvent := func(event discovery.Event) {
@@ -111,7 +133,11 @@ func runEventLoop(ctx context.Context, opts *cliOpts, eventsCh <-chan discovery.
 				return
 			}
 
-			logWriter, errWriter := makeLogWriters(opts, event.ContainerName, event.Group)
+			logWriter, errWriter, err := makeLogWriters(opts, event.ContainerName, event.Group)
+			if err != nil {
+				log.Printf("[WARN] failed to create log writers for %s, %v", event.ContainerName, err)
+				return
+			}
 			ls := &logger.LogStreamer{
 				DockerClient:  logClient,
 				ContainerID:   event.ContainerID,
@@ -133,50 +159,63 @@ func runEventLoop(ctx context.Context, opts *cliOpts, eventsCh <-chan discovery.
 		}
 
 		log.Printf("[DEBUG] close loggers for %+v", event)
-		ls.Close()
-
-		if e := ls.LogWriter.Close(); e != nil {
-			log.Printf("[WARN] failed to close log writer for %+v, %s", event, e)
-		}
-
-		if !opts.MixErr { // don't close err writer in mixed mode, closed already by LogWriter.Close()
-			if e := ls.ErrWriter.Close(); e != nil {
-				log.Printf("[WARN] failed to close err writer for %+v, %s", event, e)
-			}
-		}
+		closeStreamer(ls, event.ContainerName, opts.MixErr)
 		delete(logStreams, event.ContainerID)
 		log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
+	}
+
+	closeAll := func() {
+		for _, v := range logStreams {
+			closeStreamer(v, v.ContainerName, opts.MixErr)
+			log.Printf("[INFO] close logger stream for %s", v.ContainerName)
+		}
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Print("[WARN] event loop terminated")
-			for _, v := range logStreams {
-				v.Close()
-				if e := v.LogWriter.Close(); e != nil {
-					log.Printf("[WARN] failed to close log writer for %s, %s", v.ContainerName, e)
+			closeAll()
+			return nil
+		case err := <-listenerErr:
+			log.Printf("[ERROR] event listener failed, %v", err)
+			closeAll()
+			return err
+		case event, ok := <-eventsCh:
+			if !ok {
+				log.Print("[WARN] events channel closed, terminating event loop")
+				closeAll()
+				// check if the listener sent a more specific error before closing the channel
+				select {
+				case err := <-listenerErr:
+					return err
+				default:
+					return errors.New("events channel closed unexpectedly")
 				}
-				if !opts.MixErr {
-					if e := v.ErrWriter.Close(); e != nil {
-						log.Printf("[WARN] failed to close err writer for %s, %s", v.ContainerName, e)
-					}
-				}
-				log.Printf("[INFO] close logger stream for %s", v.ContainerName)
 			}
-			return
-		case event := <-eventsCh:
 			log.Printf("[DEBUG] received event %+v", event)
 			procEvent(event)
 		}
 	}
 }
 
+func closeStreamer(ls *logger.LogStreamer, name string, mixErr bool) {
+	ls.Close()
+	if e := ls.LogWriter.Close(); e != nil {
+		log.Printf("[WARN] failed to close log writer for %s, %s", name, e)
+	}
+	if !mixErr {
+		if e := ls.ErrWriter.Close(); e != nil {
+			log.Printf("[WARN] failed to close err writer for %s, %s", name, e)
+		}
+	}
+}
+
 // makeLogWriters creates io.WriteCloser with rotated out and separate err files. Also adds writer for remote syslog
-func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errWriter io.WriteCloser) {
+func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errWriter io.WriteCloser, err error) {
 	log.Printf("[DEBUG] create log writer for %s", strings.TrimPrefix(group+"/"+containerName, "/"))
 	if !opts.EnableFiles && !opts.EnableSyslog {
-		log.Fatalf("[ERROR] either files or syslog has to be enabled")
+		return nil, nil, errors.New("either files or syslog has to be enabled")
 	}
 
 	var logWriters []io.WriteCloser // collect log writers here, for MultiWriter use
@@ -188,7 +227,7 @@ func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errW
 			logDir = fmt.Sprintf("%s/%s", opts.FilesLocation, group)
 		}
 		if err := os.MkdirAll(logDir, 0o750); err != nil {
-			log.Fatalf("[ERROR] can't make directory %s, %v", logDir, err)
+			return nil, nil, errors.Wrapf(err, "can't make directory %s", logDir)
 		}
 
 		logName := fmt.Sprintf("%s/%s.log", logDir, containerName)
@@ -226,10 +265,14 @@ func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errW
 
 		if err == nil {
 			logWriters = append(logWriters, syslogWriter)
-			errWriters = append(errWriters, syslogWriter)
+			errWriters = append(errWriters, writeNopCloser{syslogWriter}) // wrap to prevent double-close
 		} else {
-			log.Printf("[WARN] can't connect to syslog, %v", err)
+			log.Printf("[ERROR] can't connect to syslog, %v", err)
 		}
+	}
+
+	if len(logWriters) == 0 {
+		return nil, nil, errors.New("no log destinations available")
 	}
 
 	lw := logger.NewMultiWriterIgnoreErrors(logWriters...)
@@ -239,8 +282,16 @@ func makeLogWriters(opts *cliOpts, containerName, group string) (logWriter, errW
 		ew = ew.WithExtJSON(containerName, group)
 	}
 
-	return lw, ew
+	return lw, ew, nil
 }
+
+// writeNopCloser wraps an io.Writer with a no-op Close method.
+// used to prevent double-close when the same writer (e.g., syslog) is shared between log and err MultiWriters.
+type writeNopCloser struct {
+	io.Writer
+}
+
+func (writeNopCloser) Close() error { return nil }
 
 func setupLog(dbg bool) {
 	if dbg {

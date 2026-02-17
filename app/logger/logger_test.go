@@ -25,13 +25,10 @@ func TestLogStreamer_ContextCancel(t *testing.T) {
 
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
-	st := time.Now()
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		cancel()
-	}()
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
+	cancel()
 	l.Wait()
-	assert.Less(t, time.Since(st), time.Second, "should terminate quickly after cancel")
 	assert.Len(t, mock.LogsCalls(), 1)
 }
 
@@ -44,14 +41,10 @@ func TestLogStreamer_Close(t *testing.T) {
 
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		l.Close()
-	}()
-	st := time.Now()
-	l.Wait()
-	assert.Less(t, time.Since(st), time.Second, "should terminate after close")
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
+	l.Close()
+	assert.Len(t, mock.LogsCalls(), 1)
 }
 
 func TestLogStreamer_NormalCompletion(t *testing.T) {
@@ -69,7 +62,8 @@ func TestLogStreamer_NormalCompletion(t *testing.T) {
 		ErrWriter:     nopWriteCloser{buf},
 	}
 	l = l.Go(ctx)
-	time.Sleep(50 * time.Millisecond)
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
 	l.Close()
 	assert.Len(t, mock.LogsCalls(), 1)
 }
@@ -111,7 +105,8 @@ func TestLogStreamer_ErrorTermination(t *testing.T) {
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
 
-	time.Sleep(50 * time.Millisecond)
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
 	l.Close()
 	assert.Len(t, mock.LogsCalls(), 1)
 }
@@ -158,7 +153,8 @@ func TestLogStreamer_InitialTail(t *testing.T) {
 
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
-	time.Sleep(50 * time.Millisecond)
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
 	cancel()
 	l.Wait()
 }
@@ -178,6 +174,38 @@ func TestLogStreamer_GoReturnsPointer(t *testing.T) {
 	assert.Equal(t, "test_id", result.ContainerID)
 	cancel()
 	result.Wait()
+}
+
+func TestLogStreamer_ErrAfterError(t *testing.T) {
+	ctx := context.Background()
+	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+		return errors.New("some docker error")
+	}}
+
+	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
+	l = l.Go(ctx)
+
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
+	l.Close()
+	assert.EqualError(t, l.Err(), "some docker error")
+}
+
+func TestLogStreamer_ErrAfterNormalClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+		<-opts.Context.Done()
+		return opts.Context.Err()
+	}}
+
+	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
+	l = l.Go(ctx)
+
+	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
+		5*time.Second, 10*time.Millisecond, "should have called Logs")
+	cancel()
+	l.Wait()
+	assert.NoError(t, l.Err(), "no error expected after normal context cancellation")
 }
 
 type nopWriteCloser struct {

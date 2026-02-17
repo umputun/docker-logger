@@ -19,6 +19,7 @@ type EventNotif struct {
 	includesRegexp *regexp.Regexp
 	excludesRegexp *regexp.Regexp
 	eventsCh       chan Event
+	listenerErr    chan error // communicates activate() failure back to the caller
 }
 
 // Event is simplified docker.APIEvents for containers only, exposed to caller
@@ -40,23 +41,31 @@ type DockerClient interface {
 
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
+// EventNotifOpts contains options for NewEventNotif
+type EventNotifOpts struct {
+	Excludes        []string
+	Includes        []string
+	IncludesPattern string
+	ExcludesPattern string
+}
+
 // NewEventNotif makes EventNotif publishing all changes to eventsCh
-func NewEventNotif(dockerClient DockerClient, excludes, includes []string, includesPattern, excludesPattern string) (*EventNotif, error) {
+func NewEventNotif(dockerClient DockerClient, opts EventNotifOpts) (*EventNotif, error) {
 	log.Printf("[DEBUG] create events notif, excludes: %+v, includes: %+v, includesPattern: %+v, excludesPattern: %+v",
-		excludes, includes, includesPattern, excludesPattern)
+		opts.Excludes, opts.Includes, opts.IncludesPattern, opts.ExcludesPattern)
 
 	var err error
 	var includesRe *regexp.Regexp
-	if includesPattern != "" {
-		includesRe, err = regexp.Compile(includesPattern)
+	if opts.IncludesPattern != "" {
+		includesRe, err = regexp.Compile(opts.IncludesPattern)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compile includesPattern")
 		}
 	}
 
 	var excludesRe *regexp.Regexp
-	if excludesPattern != "" {
-		excludesRe, err = regexp.Compile(excludesPattern)
+	if opts.ExcludesPattern != "" {
+		excludesRe, err = regexp.Compile(opts.ExcludesPattern)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compile excludesPattern")
 		}
@@ -64,11 +73,12 @@ func NewEventNotif(dockerClient DockerClient, excludes, includes []string, inclu
 
 	res := EventNotif{
 		dockerClient:   dockerClient,
-		excludes:       excludes,
-		includes:       includes,
+		excludes:       opts.Excludes,
+		includes:       opts.Includes,
 		includesRegexp: includesRe,
 		excludesRegexp: excludesRe,
 		eventsCh:       make(chan Event, 100),
+		listenerErr:    make(chan error, 1),
 	}
 
 	// first get all currently running containers
@@ -88,12 +98,22 @@ func (e *EventNotif) Channel() (res <-chan Event) {
 	return e.eventsCh
 }
 
+// Err returns a channel that receives an error if the event listener fails to start.
+// the channel is buffered (size 1) and will receive at most one error.
+func (e *EventNotif) Err() <-chan error {
+	return e.listenerErr
+}
+
 // activate starts blocking listener for all docker events
-// filters everything except "container" type, detects stop/start events and publishes to eventsCh
+// filters everything except "container" type, detects stop/start events and publishes to eventsCh.
+// on failure or channel close, it closes eventsCh to signal consumers.
 func (e *EventNotif) activate(client DockerClient) {
 	dockerEventsCh := make(chan *docker.APIEvents)
 	if err := client.AddEventListener(dockerEventsCh); err != nil {
-		log.Fatalf("[ERROR] can't add even listener, %v", err)
+		log.Printf("[ERROR] can't add event listener, %v", err)
+		e.listenerErr <- errors.Wrap(err, "can't add event listener")
+		close(e.eventsCh)
+		return
 	}
 
 	upStatuses := []string{"start", "restart"}
@@ -116,17 +136,23 @@ func (e *EventNotif) activate(client DockerClient) {
 			continue
 		}
 
+		ts := time.Unix(0, dockerEvent.TimeNano)
+		if dockerEvent.TimeNano == 0 {
+			ts = time.Unix(dockerEvent.Time, 0)
+		}
+
 		event := Event{
 			ContainerID:   dockerEvent.Actor.ID,
 			ContainerName: containerName,
 			Status:        slices.Contains(upStatuses, dockerEvent.Status),
-			TS:            time.Unix(dockerEvent.Time/1000, dockerEvent.TimeNano),
+			TS:            ts,
 			Group:         e.group(dockerEvent.From),
 		}
 		log.Printf("[INFO] new event %+v", event)
 		e.eventsCh <- event
 	}
-	log.Fatalf("[ERROR] event listener failed")
+	log.Printf("[WARN] event listener closed")
+	close(e.eventsCh)
 }
 
 // emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events
@@ -138,6 +164,10 @@ func (e *EventNotif) emitRunningContainers() error {
 	log.Printf("[DEBUG] total containers = %d", len(containers))
 
 	for _, c := range containers {
+		if len(c.Names) == 0 {
+			log.Printf("[WARN] container %s has no names, skipped", c.ID)
+			continue
+		}
 		containerName := strings.TrimPrefix(c.Names[0], "/")
 		if !e.isAllowed(containerName) {
 			log.Printf("[INFO] container %s excluded", containerName)
@@ -147,7 +177,7 @@ func (e *EventNotif) emitRunningContainers() error {
 			Status:        true,
 			ContainerName: containerName,
 			ContainerID:   c.ID,
-			TS:            time.Unix(c.Created/1000, 0),
+			TS:            time.Unix(c.Created, 0),
 			Group:         e.group(c.Image),
 		}
 		log.Printf("[DEBUG] running container added, %+v", event)

@@ -29,7 +29,7 @@ type jMsg struct {
 	Host      string    `json:"host"`
 }
 
-// NewMultiWriterIgnoreErrors create WriteCloser for multiple destinations
+// NewMultiWriterIgnoreErrors creates WriteCloser for multiple destinations
 func NewMultiWriterIgnoreErrors(writers ...io.WriteCloser) *MultiWriter {
 	w := make([]io.WriteCloser, len(writers))
 	copy(w, writers)
@@ -61,8 +61,8 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 	}
 
 	numErrors := 0
-	for _, w := range w.writers {
-		if _, err = w.Write(pp); err != nil {
+	for _, wr := range w.writers {
+		if _, err = wr.Write(pp); err != nil {
 			numErrors++
 		}
 	}
@@ -78,8 +78,8 @@ func (w *MultiWriter) Write(p []byte) (n int, err error) {
 // Close all writers, collect errors
 func (w *MultiWriter) Close() error {
 	errs := new(multierror.Error)
-	for _, w := range w.writers {
-		errs = multierror.Append(errs, w.Close())
+	for _, wr := range w.writers {
+		errs = multierror.Append(errs, wr.Close())
 	}
 	return errs.ErrorOrNil()
 }

@@ -5,7 +5,7 @@
 the `-t` option and configured with a logging driver that works with docker logs (journald and json-file).
 It can forward both stdout and stderr of containers to local, rotated files and/or to remote syslog.
 
-_note: [dkll](https://github.com/umputun/dkll) inlcudes all functionality of docker-logger, but adds server and cli client_
+_note: [dkll](https://github.com/umputun/dkll) includes all functionality of docker-logger, but adds server and cli client_
 
 ## Install
 
@@ -30,13 +30,18 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 | `--include-pattern` | `INCLUDE_PATTERN` |                             | only include container names matching a regex |
 | `--exclude-pattern` | `EXCLUDE_PATTERN` |                             | only exclude container names matching a regex |
 |                     | `TIME_ZONE`       | UTC                         | time zone for container                       |
+| `--loc`             | `LOG_FILES_LOC`   | logs                        | log files location                            |
+| `--syslog-prefix`   | `SYSLOG_PREFIX`   | docker/                     | syslog prefix                                 |
 | `--json`, `-j`      | `JSON`            | false                       | output formatted as JSON                      |
+| `--dbg`             | `DEBUG`           | false                       | debug mode                                    |
 
 
 - at least one of destinations (`files` or `syslog`) should be allowed
 - location of log files can be mapped to host via `volume`, ex: `- ./logs:/srv/logs` (see `docker-compose.yml`)
-- both `--exclude` and `--include` flags are optional and mutually exclusive, i.e. if `--exclude` defined `--include` not allowed, and vise versa.
-- both `--include` and `--include-pattern` flags are optional and mutually exclusive, i.e. if `--include` defined `--include-pattern` not allowed, and vise versa.
+- both `--exclude` and `--include` flags are optional and mutually exclusive, i.e. if `--exclude` defined `--include` not allowed, and vice versa.
+- both `--include` and `--include-pattern` flags are optional and mutually exclusive, i.e. if `--include` defined `--include-pattern` not allowed, and vice versa.
+- both `--exclude` and `--exclude-pattern` flags are optional and mutually exclusive, i.e. if `--exclude` defined `--exclude-pattern` not allowed, and vice versa.
+- cross-kind combinations are also mutually exclusive: `--include` + `--exclude-pattern`, `--include-pattern` + `--exclude`, and `--include-pattern` + `--exclude-pattern` are not allowed.
 
 ## Build from the source
 
