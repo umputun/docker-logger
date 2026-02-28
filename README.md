@@ -43,7 +43,28 @@ All changes can be done via container's environment in `docker-compose.yml` or w
 - both `--exclude` and `--exclude-pattern` flags are optional and mutually exclusive, i.e. if `--exclude` defined `--exclude-pattern` not allowed, and vice versa.
 - cross-kind combinations are also mutually exclusive: `--include` + `--exclude-pattern`, `--include-pattern` + `--exclude`, and `--include-pattern` + `--exclude-pattern` are not allowed.
 
-## Build from the source
+## Running as Non-Root
+
+By default, the container runs as root because access to the Docker socket (`/var/run/docker.sock`) requires it on most systems. To run as a non-root user, set the following environment variables:
+
+- `APP_UID` — the user ID for the application process (e.g., `1001`)
+- `DOCKER_GID` — the group ID that owns the Docker socket on the host
+
+To find the Docker socket GID on the host, run:
+
+```shell
+stat -c '%g' /var/run/docker.sock
+```
+
+Then configure the container accordingly:
+
+```yaml
+environment:
+    - APP_UID=1001
+    - DOCKER_GID=998  # use the value from the command above
+```
+
+## Build from the Source
 
 - clone this repo - `git clone https://github.com/umputun/docker-logger.git`
 - build the logger - `cd docker-logger && docker build -t umputun/docker-logger .`

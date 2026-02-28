@@ -1,4 +1,4 @@
-FROM umputun/baseimage:buildgo-latest as build
+FROM umputun/baseimage:buildgo-latest AS build
 
 ARG GIT_BRANCH
 ARG GITHUB_SHA
@@ -20,10 +20,12 @@ RUN \
 FROM umputun/baseimage:app-latest
 LABEL org.opencontainers.image.source="https://github.com/umputun/docker-logger"
 
+# run as root by default because docker socket access requires it on most systems.
+# to run as non-root, set APP_UID=1001 and DOCKER_GID to match the host's docker socket GID.
+ENV APP_UID=0
+
 COPY --from=build /build/docker-logger /srv/docker-logger
-RUN \
-    chown -R app:app /srv && \
-    chmod +x /srv/docker-logger
+RUN chmod +x /srv/docker-logger
 WORKDIR /srv
 
 VOLUME ["/srv/logs"]
