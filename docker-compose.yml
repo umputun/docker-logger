@@ -20,7 +20,7 @@ services:
             - MAX_SIZE=50
             - MAX_AGE=20
             - DEBUG=false
-            - TIME_ZONE=America/Chicago
+            # - TIME_ZONE=America/Chicago
             ## to run as non-root, set APP_UID to the desired user id and DOCKER_GID
             ## to the group id owning /var/run/docker.sock on the host (check with: stat -c '%g' /var/run/docker.sock)
             # - APP_UID=1001
