@@ -33,8 +33,8 @@ github.com/hashicorp/go-multierror
 # github.com/jessevdk/go-flags v1.6.1
 ## explicit; go 1.20
 github.com/jessevdk/go-flags
-# github.com/klauspost/compress v1.18.4
-## explicit; go 1.23
+# github.com/klauspost/compress v1.18.6
+## explicit; go 1.24
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -50,18 +50,18 @@ github.com/klauspost/compress/zstd/internal/xxhash
 github.com/moby/go-archive
 github.com/moby/go-archive/compression
 github.com/moby/go-archive/tarheader
-# github.com/moby/moby/api v1.53.0
-## explicit; go 1.24.0
+# github.com/moby/moby/api v1.54.2
+## explicit; go 1.24
 github.com/moby/moby/api/pkg/stdcopy
 github.com/moby/moby/api/types/jsonstream
 github.com/moby/moby/api/types/registry
-# github.com/moby/moby/client v0.2.2
-## explicit; go 1.24.0
+# github.com/moby/moby/client v0.4.1
+## explicit; go 1.24
 github.com/moby/moby/client/pkg/jsonmessage
-# github.com/moby/moby/v2 v2.0.0-beta.6
-## explicit; go 1.25.0
+# github.com/moby/moby/v2 v2.0.0-beta.14
+## explicit; go 1.25.5
 github.com/moby/moby/v2/pkg/homedir
-# github.com/moby/patternmatcher v0.6.0
+# github.com/moby/patternmatcher v0.6.1
 ## explicit; go 1.19
 github.com/moby/patternmatcher
 # github.com/moby/sys/sequential v0.6.0
@@ -100,8 +100,8 @@ github.com/sirupsen/logrus
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/assert/yaml
 github.com/stretchr/testify/require
-# golang.org/x/sys v0.41.0
-## explicit; go 1.24.0
+# golang.org/x/sys v0.44.0
+## explicit; go 1.25.0
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
