@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -119,6 +120,87 @@ func TestEmit(t *testing.T) {
 	assert.True(t, ev.Status, "started")
 	assert.Equal(t, "group2", ev.Group)
 	assert.WithinDuration(t, now, ev.TS, time.Second, "timestamp should be close to now")
+}
+
+func TestEmitMoreRunningContainersThanBuffer(t *testing.T) {
+	const count = eventsChBuffer + 50
+	containers := make([]dockerclient.APIContainers, 0, count)
+	for i := range count {
+		containers = append(containers, dockerclient.APIContainers{
+			ID: fmt.Sprintf("id%d", i), Names: []string{fmt.Sprintf("name%d", i)}, Image: "img:latest",
+		})
+	}
+
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return containers, nil
+		},
+		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+
+	// the caller can't drain the channel before the constructor returns, it has to fit the whole initial batch
+	type result struct {
+		events *EventNotif
+		err    error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		events, err := NewEventNotif(mock, EventNotifOpts{})
+		resCh <- result{events: events, err: err}
+	}()
+
+	var res result
+	select {
+	case res = <-resCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("NewEventNotif blocked with more running containers than the events buffer holds")
+	}
+	require.NoError(t, res.err)
+
+	for i := range count {
+		ev := <-res.events.Channel()
+		assert.Equal(t, fmt.Sprintf("name%d", i), ev.ContainerName)
+		assert.True(t, ev.Status, "started")
+	}
+}
+
+func TestActivateAbsorbsBurstWithSlowConsumer(t *testing.T) {
+	const burst = eventsChBuffer + 50
+	mock, getEventsCh := makeListenerMock()
+
+	events, err := NewEventNotif(mock, EventNotifOpts{})
+	require.NoError(t, err)
+	eventsCh := getEventsCh()
+
+	// docker client drops events for a listener which is not ready, so sending must not block
+	// while nothing consumes the outgoing channel
+	sent := make(chan struct{})
+	go func() {
+		defer close(sent)
+		for i := range burst {
+			ev := &dockerclient.APIEvents{Type: "container", Status: "start"}
+			ev.Actor.Attributes = map[string]string{"name": fmt.Sprintf("name%d", i)}
+			ev.Actor.ID = fmt.Sprintf("id%d", i)
+			eventsCh <- ev
+		}
+	}()
+
+	select {
+	case <-sent:
+	case <-time.After(5 * time.Second):
+		t.Fatal("sending to the docker events listener blocked, the client would drop these events")
+	}
+
+	// docker client dispatches each event in its own goroutine, so collect without assuming any order
+	received := map[string]bool{}
+	for range burst {
+		received[(<-events.Channel()).ContainerName] = true
+	}
+	for i := range burst {
+		assert.True(t, received[fmt.Sprintf("name%d", i)], "no event should be lost")
+	}
 }
 
 func TestEmitSkipsContainersWithNoNames(t *testing.T) {
