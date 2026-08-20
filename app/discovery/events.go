@@ -41,6 +41,15 @@ type DockerClient interface {
 
 var reGroup = regexp.MustCompile(`/(.*?)/`)
 
+const (
+	// eventsChBuffer is the minimal size of the outgoing events channel, on start it grows to fit
+	// all the running containers detected by the initial scan
+	eventsChBuffer = 100
+	// dockerEventsChBuffer is the size of the incoming docker events channel. the docker client drops
+	// events for a listener which is not ready to receive them, so the buffer absorbs bursts
+	dockerEventsChBuffer = 1000
+)
+
 // EventNotifOpts contains options for NewEventNotif
 type EventNotifOpts struct {
 	Excludes        []string
@@ -77,14 +86,21 @@ func NewEventNotif(dockerClient DockerClient, opts EventNotifOpts) (*EventNotif,
 		includes:       opts.Includes,
 		includesRegexp: includesRe,
 		excludesRegexp: excludesRe,
-		eventsCh:       make(chan Event, 100),
 		listenerErr:    make(chan error, 1),
 	}
 
-	// first get all currently running containers
-	if err := res.emitRunningContainers(); err != nil {
+	// first get all currently running containers, the caller can't consume events until this returns
+	// so the channel has to be big enough to hold the whole initial batch
+	initial, err := res.runningContainerEvents()
+	if err != nil {
 		return nil, errors.Wrap(err, "failed to emit containers")
 	}
+
+	res.eventsCh = make(chan Event, max(eventsChBuffer, len(initial)))
+	for _, event := range initial {
+		res.eventsCh <- event
+	}
+	log.Print("[DEBUG] completed initial emit")
 
 	go func() {
 		res.activate(dockerClient) // activate listener for new container events
@@ -108,7 +124,7 @@ func (e *EventNotif) Err() <-chan error {
 // filters everything except "container" type, detects stop/start events and publishes to eventsCh.
 // on failure or channel close, it closes eventsCh to signal consumers.
 func (e *EventNotif) activate(client DockerClient) {
-	dockerEventsCh := make(chan *docker.APIEvents)
+	dockerEventsCh := make(chan *docker.APIEvents, dockerEventsChBuffer)
 	if err := client.AddEventListener(dockerEventsCh); err != nil {
 		log.Printf("[ERROR] can't add event listener, %v", err)
 		e.listenerErr <- errors.Wrap(err, "can't add event listener")
@@ -155,14 +171,15 @@ func (e *EventNotif) activate(client DockerClient) {
 	close(e.eventsCh)
 }
 
-// emitRunningContainers gets all currently running containers and publishes them as "Status=true" (started) events
-func (e *EventNotif) emitRunningContainers() error {
+// runningContainerEvents gets all currently running containers and makes "Status=true" (started) events for them
+func (e *EventNotif) runningContainerEvents() ([]Event, error) {
 	containers, err := e.dockerClient.ListContainers(docker.ListContainersOptions{All: false})
 	if err != nil {
-		return errors.Wrap(err, "can't list containers")
+		return nil, errors.Wrap(err, "can't list containers")
 	}
 	log.Printf("[DEBUG] total containers = %d", len(containers))
 
+	events := make([]Event, 0, len(containers))
 	for _, c := range containers {
 		if len(c.Names) == 0 {
 			log.Printf("[WARN] container %s has no names, skipped", c.ID)
@@ -181,10 +198,9 @@ func (e *EventNotif) emitRunningContainers() error {
 			Group:         e.group(c.Image),
 		}
 		log.Printf("[DEBUG] running container added, %+v", event)
-		e.eventsCh <- event
+		events = append(events, event)
 	}
-	log.Print("[DEBUG] completed initial emit")
-	return nil
+	return events, nil
 }
 
 func (e *EventNotif) group(image string) string {
