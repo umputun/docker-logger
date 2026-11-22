@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
@@ -56,7 +57,7 @@ func TestLogStreamer_CloseWaitsForInFlightWrite(t *testing.T) {
 	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
 		close(started)
 		<-opts.Context.Done()
-		time.Sleep(50 * time.Millisecond) // the client is still copying out the container's last line when the cancel comes
+		time.Sleep(50 * time.Millisecond)
 		_, _ = opts.OutputStream.Write([]byte("last line\n"))
 		return opts.Context.Err()
 	}}
@@ -69,7 +70,6 @@ func TestLogStreamer_CloseWaitsForInFlightWrite(t *testing.T) {
 		t.Fatal("Logs was not called")
 	}
 
-	// what closeStreamer does on a container stop: close the streamer, then its writers
 	l.Close()
 	require.NoError(t, w.Close())
 	assert.Equal(t, []string{"write last line\n", "close"}, w.events(), "the last line should be written before the writer is closed")
@@ -90,7 +90,7 @@ func TestLogStreamer_NormalCompletion(t *testing.T) {
 		ErrWriter:     nopWriteCloser{buf},
 	}
 	l = l.Go(ctx)
-	l.Wait() // the stream goroutine exits on its own when the daemon ends the stream
+	l.Wait()
 	assert.Len(t, mock.LogsCalls(), 1)
 	require.NoError(t, l.Err())
 	l.Close()
@@ -134,57 +134,94 @@ func TestLogStreamer_ErrorTermination(t *testing.T) {
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
 
-	l.Wait() // a refusal from the daemon is final, so the goroutine exits on its own
+	l.Wait()
 	assert.Len(t, mock.LogsCalls(), 1)
 	l.Close()
 }
 
 func TestLogStreamer_ReopenAfterDroppedStream(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 
-	start := time.Now().Unix()
-	reopened := make(chan docker.LogsOptions, 1)
-	var callCount atomic.Int32
-	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
-		if callCount.Add(1) == 1 {
-			_, _ = opts.OutputStream.Write([]byte("before drop\n"))
-			return io.ErrUnexpectedEOF // what a proxy closing the connection mid-stream looks like
+		reopened := make(chan docker.LogsOptions, 1)
+		var wroteAt int64
+		var callCount atomic.Int32
+		mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+			if callCount.Add(1) == 1 {
+				time.Sleep(time.Minute)
+				_, _ = opts.OutputStream.Write([]byte("before drop\n"))
+				wroteAt = time.Now().Unix()
+				return io.ErrUnexpectedEOF
+			}
+			reopened <- opts
+			_, _ = opts.OutputStream.Write([]byte("after drop\n"))
+			<-opts.Context.Done()
+			return opts.Context.Err()
+		}}
+
+		logBuf := &bytes.Buffer{}
+		l := &LogStreamer{
+			ContainerID:   "test_id",
+			ContainerName: "test_name",
+			DockerClient:  mock,
+			LogWriter:     nopWriteCloser{logBuf},
+			ErrWriter:     nopWriteCloser{&bytes.Buffer{}},
 		}
-		reopened <- opts
-		_, _ = opts.OutputStream.Write([]byte("after drop\n"))
-		<-opts.Context.Done()
-		return opts.Context.Err()
-	}}
+		l = l.Go(ctx)
 
-	logBuf := &bytes.Buffer{} // read only after Wait, when the stream goroutine is gone
-	l := &LogStreamer{
-		ContainerID:   "test_id",
-		ContainerName: "test_name",
-		DockerClient:  mock,
-		LogWriter:     nopWriteCloser{logBuf},
-		ErrWriter:     nopWriteCloser{&bytes.Buffer{}},
-	}
-	l = l.Go(ctx)
+		opts := <-reopened
+		assert.Empty(t, opts.Tail, "reopen should not repeat the last lines")
+		assert.Equal(t, wroteAt, opts.Since, "reopen should continue from the last line written")
 
-	var opts docker.LogsOptions
-	select {
-	case opts = <-reopened:
-	case <-time.After(5 * time.Second):
-		t.Fatal("dropped stream was not reopened")
-	}
-	assert.Empty(t, opts.Tail, "reopen should not repeat the last lines")
-	assert.GreaterOrEqual(t, opts.Since, start, "reopen should continue from the last line written")
-	assert.LessOrEqual(t, opts.Since, time.Now().Unix())
+		first := mock.LogsCalls()[0].LogsOptions
+		assert.Equal(t, "10", first.Tail)
+		assert.Zero(t, first.Since)
 
-	first := mock.LogsCalls()[0].LogsOptions
-	assert.Equal(t, "10", first.Tail)
-	assert.Zero(t, first.Since)
+		cancel()
+		l.Wait()
+		require.NoError(t, l.Err())
+		assert.Equal(t, "before drop\nafter drop\n", logBuf.String())
+	})
+}
 
-	cancel()
-	l.Wait()
-	require.NoError(t, l.Err())
-	assert.Equal(t, "before drop\nafter drop\n", logBuf.String())
+func TestLogStreamer_ReopenBackoff(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		var starts []time.Time
+		var longFailAt time.Time
+		reopenedAfterLong := make(chan struct{})
+		mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+			starts = append(starts, time.Now())
+			switch len(starts) {
+			case 7:
+				time.Sleep(maxReopenDelay + time.Second)
+				longFailAt = time.Now()
+			case 8:
+				close(reopenedAfterLong)
+				<-opts.Context.Done()
+				return opts.Context.Err()
+			}
+			return io.ErrUnexpectedEOF
+		}}
+
+		l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
+		l = l.Go(ctx)
+		<-reopenedAfterLong
+
+		var gaps []time.Duration
+		for i := 1; i < 7; i++ {
+			gaps = append(gaps, starts[i].Sub(starts[i-1]))
+		}
+		want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second}
+		assert.Equal(t, want, gaps, "delay should double up to the cap")
+		assert.Equal(t, minReopenDelay, starts[7].Sub(longFailAt), "a stream that lived past the cap should reset the delay")
+
+		cancel()
+		l.Wait()
+	})
 }
 
 func TestLogStreamer_CancelDuringReopenDelay(t *testing.T) {
@@ -233,10 +270,11 @@ func TestReopenable(t *testing.T) {
 		{name: "log driver can't be read", err: &docker.Error{Status: http.StatusNotImplemented}, want: false},
 		{name: "empty container id", err: &docker.NoSuchContainer{}, want: false},
 		{name: "wrapped refusal", err: fmt.Errorf("logs: %w", &docker.Error{Status: http.StatusNotFound}), want: false},
+		{name: "raw tty stream", err: errors.New("unrecognized stream: 104"), want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, reopenable(tt.err))
+			assert.Equal(t, tt.want, (&LogStreamer{}).reopenable(tt.err))
 		})
 	}
 }
@@ -245,18 +283,18 @@ func TestTrackWrites(t *testing.T) {
 	var last atomic.Int64
 	buf := &bytes.Buffer{}
 	before := time.Now().Unix()
-	n, err := trackWrites(buf, &last).Write([]byte("line\n"))
+	n, err := (&LogStreamer{}).trackWrites(buf, &last).Write([]byte("line\n"))
 	require.NoError(t, err)
 	assert.Equal(t, 5, n)
 	assert.Equal(t, "line\n", buf.String())
 	assert.GreaterOrEqual(t, last.Load(), before)
 
 	last.Store(1)
-	_, err = trackWrites(failingWriter{}, &last).Write([]byte("lost\n"))
+	_, err = (&LogStreamer{}).trackWrites(failingWriter{}, &last).Write([]byte("lost\n"))
 	require.Error(t, err)
 	assert.Equal(t, int64(1), last.Load(), "a failed write should not move the reopen point past the lost line")
 
-	assert.Nil(t, trackWrites(nil, &last))
+	assert.Nil(t, (&LogStreamer{}).trackWrites(nil, &last))
 }
 
 func TestLogStreamer_WritesToOutputStreams(t *testing.T) {
