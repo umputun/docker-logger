@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -42,8 +43,8 @@ type LogStreamer struct {
 
 // Go starts log streaming in a goroutine. It attaches to the container's log stream
 // and writes to LogWriter/ErrWriter. A stream that fails for any reason other than the daemon
-// refusing it, such as a connection dropped by a proxy, is reopened with a backoff from the
-// second of the last line written.
+// refusing it or a raw TTY stream, such as a connection dropped by a proxy, is reopened with a
+// backoff from the second of the last line written.
 // After Wait() returns, use Err() to retrieve the error (if any) from the streaming goroutine.
 func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 	log.Printf("[INFO] start log streamer for %s", l.ContainerName)
@@ -64,7 +65,8 @@ func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 }
 
 // stream follows the container's log until the daemon ends it, which it does when the container
-// stops, the context is canceled, or the daemon refuses the request. Any other error is retried.
+// stops, the context is canceled, the daemon refuses the request, or the stream is a raw TTY one.
+// Any other error is retried.
 func (l *LogStreamer) stream() error {
 	// unix seconds of the last line written, or of the start if nothing is written yet
 	var lastWrite atomic.Int64
@@ -72,8 +74,8 @@ func (l *LogStreamer) stream() error {
 
 	logOpts := docker.LogsOptions{
 		Container:         l.ContainerID,
-		OutputStream:      trackWrites(l.LogWriter, &lastWrite), // logs writer for stdout
-		ErrorStream:       trackWrites(l.ErrWriter, &lastWrite), // err writer for stderr
+		OutputStream:      l.trackWrites(l.LogWriter, &lastWrite), // logs writer for stdout
+		ErrorStream:       l.trackWrites(l.ErrWriter, &lastWrite), // err writer for stderr
 		Tail:              "10",
 		Follow:            true,
 		Stdout:            true,
@@ -91,7 +93,7 @@ func (l *LogStreamer) stream() error {
 			return nil // canceled by Close or the parent context
 		default:
 		}
-		if err == nil || !reopenable(err) {
+		if err == nil || !l.reopenable(err) {
 			return err // nil when the daemon ends the stream, which it does when the container stops
 		}
 
@@ -106,8 +108,8 @@ func (l *LogStreamer) stream() error {
 		}
 		delay = min(delay*2, maxReopenDelay)
 
-		// continue from where the stream stopped instead of the last lines. Since is in whole seconds,
-		// so the lines of that second come again, but none are skipped.
+		// resume from the second of the last write, so that second's lines may repeat. The daemon filters
+		// by each line's own timestamp, so lines stamped earlier but undelivered at the drop are skipped.
 		// an empty Tail also works around https://github.com/moby/moby/issues/35370 with an empty log
 		logOpts.Tail = ""
 		logOpts.Since = lastWrite.Load()
@@ -115,22 +117,22 @@ func (l *LogStreamer) stream() error {
 }
 
 // reopenable tells whether a stream that failed with err is worth reopening. The daemon's own
-// refusals, such as an unknown container or a log driver that can't be read, are final. Anything
-// else, like a dropped connection or a proxy's 502, may be gone on the next try.
-func reopenable(err error) bool {
-	var noContainer *docker.NoSuchContainer
-	if errors.As(err, &noContainer) {
+// refusals, such as an unknown container or a log driver that can't be read, are final. So is
+// a raw TTY stream, which the stdout/stderr demultiplexer rejects as "unrecognized stream" on
+// every attempt. Anything else, like a dropped connection or a proxy's 502, may be gone on the
+// next try.
+func (l *LogStreamer) reopenable(err error) bool {
+	if _, ok := errors.AsType[*docker.NoSuchContainer](err); ok {
 		return false
 	}
-	var apiErr *docker.Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*docker.Error](err); ok {
 		return apiErr.Status >= http.StatusInternalServerError && apiErr.Status != http.StatusNotImplemented
 	}
-	return true
+	return !strings.HasPrefix(err.Error(), "unrecognized stream:")
 }
 
 // trackWrites wraps w to store the time of each successful write in last. A nil w stays nil.
-func trackWrites(w io.Writer, last *atomic.Int64) io.Writer {
+func (l *LogStreamer) trackWrites(w io.Writer, last *atomic.Int64) io.Writer {
 	if w == nil {
 		return nil
 	}
