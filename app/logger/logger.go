@@ -29,6 +29,7 @@ type LogStreamer struct {
 
 	ctx    context.Context // nolint:containedctx
 	cancel context.CancelFunc
+	done   chan struct{}
 	err    atomic.Value
 }
 
@@ -38,8 +39,10 @@ type LogStreamer struct {
 func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 	log.Printf("[INFO] start log streamer for %s", l.ContainerName)
 	l.ctx, l.cancel = context.WithCancel(ctx)
+	l.done = make(chan struct{})
 
 	go func() {
+		defer close(l.done)
 		logOpts := docker.LogsOptions{
 			Container:         l.ContainerID,
 			OutputStream:      l.LogWriter, // logs writer for stdout
@@ -86,15 +89,16 @@ func (l *LogStreamer) Err() error {
 	return v.(error)
 }
 
-// Close cancels the streaming context and waits for the cancellation to propagate.
-// The stream goroutine will exit once the Docker client observes the cancellation.
+// Close cancels the streaming context and waits for the stream goroutine to exit,
+// so nothing writes to LogWriter/ErrWriter after it returns.
 func (l *LogStreamer) Close() {
 	l.cancel()
 	l.Wait()
 	log.Printf("[DEBUG] close %s", l.ContainerID)
 }
 
-// Wait blocks until the streaming context is canceled, either by Close or parent context.
+// Wait blocks until the stream goroutine exits: the stream ended, failed,
+// or was canceled by Close or the parent context.
 func (l *LogStreamer) Wait() {
-	<-l.ctx.Done()
+	<-l.done
 }

@@ -50,7 +50,7 @@ Single-binary Go application in `app/` package (uses `package main`, not a libra
 ### Key Patterns
 
 - **Docker client interface**: `discovery.DockerClient` and `logger.LogClient` are consumer-side interfaces wrapping `go-dockerclient`. Mocks generated with `moq` into `mocks/` subdirectories.
-- **LogStreamer lifecycle**: `Go(ctx)` starts streaming in a goroutine, `Close()` cancels context and waits, `Wait()` blocks on `ctx.Done()`, `Err()` retrieves the error (if any) after `Wait()` returns. Has retry logic for Docker EOF errors.
+- **LogStreamer lifecycle**: `Go(ctx)` starts streaming in a goroutine, `Close()` cancels context and waits, `Wait()` blocks until the streaming goroutine exits, `Err()` retrieves the error (if any) after `Wait()` returns. Has retry logic for Docker EOF errors.
 - **MultiWriter**: ignores individual write errors unless all writers fail. `Close()` collects errors via `go-multierror`.
 - **Container filtering**: supports name lists (`--exclude`/`--include`) and regex patterns (`--exclude-pattern`/`--include-pattern`), mutually exclusive within each group and across groups (e.g., `--include` + `--exclude-pattern` is also invalid).
 

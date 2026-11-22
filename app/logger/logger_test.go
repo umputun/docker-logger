@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -45,6 +46,31 @@ func TestLogStreamer_Close(t *testing.T) {
 		5*time.Second, 10*time.Millisecond, "should have called Logs")
 	l.Close()
 	assert.Len(t, mock.LogsCalls(), 1)
+}
+
+func TestLogStreamer_CloseWaitsForInFlightWrite(t *testing.T) {
+	w := &eventWriter{}
+	started := make(chan struct{})
+	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+		close(started)
+		<-opts.Context.Done()
+		time.Sleep(50 * time.Millisecond) // the client is still copying out the container's last line when the cancel comes
+		_, _ = opts.OutputStream.Write([]byte("last line\n"))
+		return opts.Context.Err()
+	}}
+
+	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock, LogWriter: w, ErrWriter: w}
+	l = l.Go(context.Background())
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Logs was not called")
+	}
+
+	// what closeStreamer does on a container stop: close the streamer, then its writers
+	l.Close()
+	require.NoError(t, w.Close())
+	assert.Equal(t, []string{"write last line\n", "close"}, w.events(), "the last line should be written before the writer is closed")
 }
 
 func TestLogStreamer_NormalCompletion(t *testing.T) {
@@ -213,3 +239,29 @@ type nopWriteCloser struct {
 }
 
 func (nopWriteCloser) Close() error { return nil }
+
+// eventWriter records writes and Close in the order they happen
+type eventWriter struct {
+	mu  sync.Mutex
+	log []string
+}
+
+func (w *eventWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.log = append(w.log, "write "+string(p))
+	return len(p), nil
+}
+
+func (w *eventWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.log = append(w.log, "close")
+	return nil
+}
+
+func (w *eventWriter) events() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]string(nil), w.log...)
+}
