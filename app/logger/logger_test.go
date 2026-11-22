@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -152,6 +153,7 @@ func TestLogStreamer_ReopenAfterDroppedStream(t *testing.T) {
 				time.Sleep(time.Minute)
 				_, _ = opts.OutputStream.Write([]byte("before drop\n"))
 				wroteAt = time.Now().Unix()
+				time.Sleep(time.Minute)
 				return io.ErrUnexpectedEOF
 			}
 			reopened <- opts
@@ -277,6 +279,34 @@ func TestReopenable(t *testing.T) {
 			assert.Equal(t, tt.want, (&LogStreamer{}).reopenable(tt.err))
 		})
 	}
+}
+
+func TestLogStreamer_RawTTYStreamIsFinal(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
+		_, _ = w.Write([]byte("hello from a tty container\r\n"))
+	}))
+	defer srv.Close()
+	client, err := docker.NewClient(srv.URL)
+	require.NoError(t, err)
+
+	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: client}
+	l = l.Go(t.Context())
+	done := make(chan struct{})
+	go func() {
+		l.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		l.Close()
+		t.Fatal("raw tty stream is still being reopened")
+	}
+	require.ErrorContains(t, l.Err(), "unrecognized stream")
+	assert.Equal(t, int32(1), calls.Load(), "a raw tty stream should not be reopened")
 }
 
 func TestTrackWrites(t *testing.T) {

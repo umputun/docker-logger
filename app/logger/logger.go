@@ -43,8 +43,8 @@ type LogStreamer struct {
 
 // Go starts log streaming in a goroutine. It attaches to the container's log stream
 // and writes to LogWriter/ErrWriter. A stream that fails for any reason other than the daemon
-// refusing it, such as a connection dropped by a proxy, is reopened with a backoff from the
-// second of the last line written.
+// refusing it or a raw TTY stream, such as a connection dropped by a proxy, is reopened with a
+// backoff from the second of the last line written.
 // After Wait() returns, use Err() to retrieve the error (if any) from the streaming goroutine.
 func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 	log.Printf("[INFO] start log streamer for %s", l.ContainerName)
@@ -65,7 +65,8 @@ func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 }
 
 // stream follows the container's log until the daemon ends it, which it does when the container
-// stops, the context is canceled, or the daemon refuses the request. Any other error is retried.
+// stops, the context is canceled, the daemon refuses the request, or the stream is a raw TTY one.
+// Any other error is retried.
 func (l *LogStreamer) stream() error {
 	// unix seconds of the last line written, or of the start if nothing is written yet
 	var lastWrite atomic.Int64
