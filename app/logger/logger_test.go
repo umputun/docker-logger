@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -88,10 +89,10 @@ func TestLogStreamer_NormalCompletion(t *testing.T) {
 		ErrWriter:     nopWriteCloser{buf},
 	}
 	l = l.Go(ctx)
-	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
-		5*time.Second, 10*time.Millisecond, "should have called Logs")
-	l.Close()
+	l.Wait() // the stream goroutine exits on its own when the daemon ends the stream
 	assert.Len(t, mock.LogsCalls(), 1)
+	require.NoError(t, l.Err())
+	l.Close()
 }
 
 func TestLogStreamer_RetryOnDockerEOF(t *testing.T) {
@@ -125,16 +126,15 @@ func TestLogStreamer_RetryOnDockerEOF(t *testing.T) {
 func TestLogStreamer_ErrorTermination(t *testing.T) {
 	ctx := context.Background()
 	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
-		return errors.New("some docker error")
+		return &docker.Error{Status: http.StatusNotFound, Message: "No such container: test_id"}
 	}}
 
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
 
-	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
-		5*time.Second, 10*time.Millisecond, "should have called Logs")
-	l.Close()
+	l.Wait() // a refusal from the daemon is final, so the goroutine exits on its own
 	assert.Len(t, mock.LogsCalls(), 1)
+	l.Close()
 }
 
 func TestLogStreamer_WritesToOutputStreams(t *testing.T) {
@@ -205,16 +205,15 @@ func TestLogStreamer_GoReturnsPointer(t *testing.T) {
 func TestLogStreamer_ErrAfterError(t *testing.T) {
 	ctx := context.Background()
 	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
-		return errors.New("some docker error")
+		return &docker.Error{Status: http.StatusNotFound, Message: "No such container: test_id"}
 	}}
 
 	l := &LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}
 	l = l.Go(ctx)
 
-	require.Eventually(t, func() bool { return len(mock.LogsCalls()) >= 1 },
-		5*time.Second, 10*time.Millisecond, "should have called Logs")
+	l.Wait()
+	require.EqualError(t, l.Err(), "API error (404): No such container: test_id")
 	l.Close()
-	assert.EqualError(t, l.Err(), "some docker error")
 }
 
 func TestLogStreamer_ErrAfterNormalClose(t *testing.T) {
