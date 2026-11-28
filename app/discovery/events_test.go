@@ -23,7 +23,7 @@ func makeListenerMock() (
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			ready <- listener
 			return nil
 		},
@@ -58,7 +58,7 @@ func TestEvents(t *testing.T) {
 	assert.Equal(t, "id1", received.ContainerID)
 	assert.False(t, received.Status, "stopped")
 
-	assert.Len(t, mock.AddEventListenerCalls(), 1)
+	assert.Len(t, mock.AddEventListenerWithOptionsCalls(), 1)
 	assert.Len(t, mock.ListContainersCalls(), 1)
 }
 
@@ -101,7 +101,7 @@ func TestEmit(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return containers, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -135,7 +135,7 @@ func TestEmitMoreRunningContainersThanBuffer(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return containers, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -213,7 +213,7 @@ func TestEmitSkipsContainersWithNoNames(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return containers, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -236,7 +236,7 @@ func TestEmitIncludes(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return containers, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -254,7 +254,7 @@ func TestNewEventNotifWithNils(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -320,7 +320,7 @@ func TestActivateExcludedContainerFiltered(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			ready <- listener
 			return nil
 		},
@@ -435,7 +435,7 @@ func TestIsAllowedExclude(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -451,7 +451,7 @@ func TestIsAllowedExcludePattern(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -469,7 +469,7 @@ func TestIsAllowedInclude(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -486,7 +486,7 @@ func TestIsAllowedIncludePattern(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return nil
 		},
 	}
@@ -516,12 +516,12 @@ func TestGroup(t *testing.T) {
 	}
 }
 
-func TestActivateAddEventListenerError(t *testing.T) {
+func TestActivateAddEventListenerWithOptionsError(t *testing.T) {
 	mock := &mocks.DockerClientMock{
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			return errors.New("listener error")
 		},
 	}
@@ -529,9 +529,9 @@ func TestActivateAddEventListenerError(t *testing.T) {
 	events, err := NewEventNotif(mock, EventNotifOpts{})
 	require.NoError(t, err)
 
-	// eventsCh should be closed because AddEventListener failed
+	// eventsCh should be closed because AddEventListenerWithOptions failed
 	_, ok := <-events.Channel()
-	assert.False(t, ok, "events channel should be closed on AddEventListener error")
+	assert.False(t, ok, "events channel should be closed on AddEventListenerWithOptions error")
 }
 
 func TestActivateEventChannelClosed(t *testing.T) {
@@ -540,7 +540,7 @@ func TestActivateEventChannelClosed(t *testing.T) {
 		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
 			return nil, nil
 		},
-		AddEventListenerFunc: func(listener chan<- *dockerclient.APIEvents) error {
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
 			ready <- listener
 			return nil
 		},
@@ -556,4 +556,54 @@ func TestActivateEventChannelClosed(t *testing.T) {
 	// eventsCh should be closed because the docker events channel was closed
 	_, ok := <-events.Channel()
 	assert.False(t, ok, "events channel should be closed when docker events channel closes")
+}
+
+func TestActivateSubscribesSinceInitialScan(t *testing.T) {
+	var scanned time.Time
+	ready := make(chan dockerclient.EventsOptions, 1)
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			scanned = time.Now()
+			return nil, nil
+		},
+		AddEventListenerWithOptionsFunc: func(opts dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
+			ready <- opts
+			return nil
+		},
+	}
+
+	before := time.Now()
+	_, err := NewEventNotif(mock, EventNotifOpts{})
+	require.NoError(t, err)
+	opts := <-ready
+
+	require.Regexp(t, `^\d+\.\d{9}$`, opts.Since, "since should be seconds with nanoseconds")
+	var sec, nsec int64
+	_, err = fmt.Sscanf(opts.Since, "%d.%d", &sec, &nsec)
+	require.NoError(t, err)
+	since := time.Unix(sec, nsec)
+	assert.False(t, since.Before(before), "since %v should not be before NewEventNotif call %v", since, before)
+	assert.False(t, since.After(scanned), "since %v should not be after the scan %v", since, scanned)
+	assert.Empty(t, opts.Until)
+	assert.Empty(t, opts.Filters)
+}
+
+func TestEmitStampsContainersWithCreated(t *testing.T) {
+	created := time.Now().Add(-time.Hour).Unix()
+	mock := &mocks.DockerClientMock{
+		ListContainersFunc: func(opts dockerclient.ListContainersOptions) ([]dockerclient.APIContainers, error) {
+			return []dockerclient.APIContainers{{ID: "id1", Names: []string{"/name1"}, Image: "img:latest", Created: created}}, nil
+		},
+		AddEventListenerWithOptionsFunc: func(_ dockerclient.EventsOptions, listener chan<- *dockerclient.APIEvents) error {
+			return nil
+		},
+	}
+
+	events, err := NewEventNotif(mock, EventNotifOpts{})
+	require.NoError(t, err)
+
+	// a stop of the container's current run is never stamped earlier than its creation
+	ev := <-events.Channel()
+	assert.Equal(t, "id1", ev.ContainerID)
+	assert.Equal(t, time.Unix(created, 0), ev.TS)
 }

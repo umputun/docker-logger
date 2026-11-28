@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	docker "github.com/fsouza/go-dockerclient"
 	log "github.com/go-pkgz/lgr"
@@ -122,52 +123,81 @@ func do(ctx context.Context, opts *cliOpts) error {
 
 func runEventLoop(ctx context.Context, opts *cliOpts, eventsCh <-chan discovery.Event,
 	listenerErr <-chan error, logClient logger.LogClient) error {
-	logStreams := map[string]*logger.LogStreamer{}
+	// the docker client delivers each event from its own goroutine, and the daemon replays the events
+	// since the initial scan on subscription, so a container's events may come reordered or repeated.
+	// started is the stamp of the latest start seen for the run the streamer follows, a stop stamped
+	// before it belongs to an earlier run. Two orderings are not recovered: a start delivered after the
+	// stop of the same run maps a streamer that exits at once and stays until the container's next
+	// event, and a newer start that arrives while the streamer of the previous run is still ending
+	// leaves the new run unlogged until the container's next start.
+	type logStream struct {
+		ls      *logger.LogStreamer
+		started time.Time
+	}
+	logStreams := map[string]*logStream{}
+
+	// new/started container detected
+	procStart := func(event discovery.Event) {
+		s, found := logStreams[event.ContainerID]
+		if found && !s.ls.Exited() {
+			// the streamer follows the current run, so a later start is that run's own
+			if event.TS.After(s.started) {
+				s.started = event.TS
+			}
+			log.Printf("[DEBUG] ignore dbl-start %+v", event)
+			return
+		}
+		if found {
+			// the streamer ended with an earlier run, this start brings the container back
+			log.Printf("[DEBUG] replace exited streamer for %+v", event)
+			closeStreamer(s.ls, s.ls.ContainerName, opts.MixErr)
+			delete(logStreams, event.ContainerID)
+		}
+
+		logWriter, errWriter, err := makeLogWriters(opts, event.ContainerName, event.Group)
+		if err != nil {
+			log.Printf("[WARN] failed to create log writers for %s, %v", event.ContainerName, err)
+			return
+		}
+		ls := &logger.LogStreamer{
+			DockerClient:  logClient,
+			ContainerID:   event.ContainerID,
+			ContainerName: event.ContainerName,
+			LogWriter:     logWriter,
+			ErrWriter:     errWriter,
+		}
+		ls.Go(ctx)
+		logStreams[event.ContainerID] = &logStream{ls: ls, started: event.TS}
+		log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
+	}
 
 	procEvent := func(event discovery.Event) {
 		if event.Status {
-			// new/started container detected
-
-			if _, found := logStreams[event.ContainerID]; found {
-				log.Printf("[WARN] ignore dbl-start %+v", event)
-				return
-			}
-
-			logWriter, errWriter, err := makeLogWriters(opts, event.ContainerName, event.Group)
-			if err != nil {
-				log.Printf("[WARN] failed to create log writers for %s, %v", event.ContainerName, err)
-				return
-			}
-			ls := &logger.LogStreamer{
-				DockerClient:  logClient,
-				ContainerID:   event.ContainerID,
-				ContainerName: event.ContainerName,
-				LogWriter:     logWriter,
-				ErrWriter:     errWriter,
-			}
-			ls.Go(ctx)
-			logStreams[event.ContainerID] = ls
-			log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
+			procStart(event)
 			return
 		}
 
 		// removed/stopped container detected
-		ls, ok := logStreams[event.ContainerID]
-		if !ok {
+		s, found := logStreams[event.ContainerID]
+		if !found {
 			log.Printf("[DEBUG] close loggers event %+v for non-mapped container ignored", event)
+			return
+		}
+		if event.TS.Before(s.started) {
+			log.Printf("[DEBUG] close loggers event %+v older than the streamed run ignored", event)
 			return
 		}
 
 		log.Printf("[DEBUG] close loggers for %+v", event)
-		closeStreamer(ls, event.ContainerName, opts.MixErr)
+		closeStreamer(s.ls, event.ContainerName, opts.MixErr)
 		delete(logStreams, event.ContainerID)
 		log.Printf("[DEBUG] streaming for %d containers", len(logStreams))
 	}
 
 	closeAll := func() {
 		for _, v := range logStreams {
-			closeStreamer(v, v.ContainerName, opts.MixErr)
-			log.Printf("[INFO] close logger stream for %s", v.ContainerName)
+			closeStreamer(v.ls, v.ls.ContainerName, opts.MixErr)
+			log.Printf("[INFO] close logger stream for %s", v.ls.ContainerName)
 		}
 	}
 

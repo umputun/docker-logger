@@ -458,3 +458,52 @@ func (w *eventWriter) events() []string {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("disk full") }
+
+func TestLogStreamer_Exited(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		stop := make(chan struct{})
+		var calls atomic.Int32
+		mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+			if calls.Add(1) == 1 {
+				return errors.New("connection reset") // dropped, reopened after a delay
+			}
+			<-stop
+			return nil
+		}}
+
+		l := (&LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}).Go(t.Context())
+		synctest.Wait()
+		assert.False(t, l.Exited(), "a stream waiting to be reopened has not exited")
+
+		time.Sleep(minReopenDelay)
+		synctest.Wait()
+		assert.False(t, l.Exited(), "a reopened stream has not exited")
+		assert.EqualValues(t, 2, calls.Load())
+
+		close(stop)
+		synctest.Wait()
+		assert.True(t, l.Exited(), "a stream the daemon ended has exited")
+	})
+}
+
+func TestLogStreamer_ContextReleasedAfterExit(t *testing.T) {
+	mock := &mocks.LogClientMock{LogsFunc: func(opts docker.LogsOptions) error {
+		return nil // the daemon ends the stream, the container stopped
+	}}
+
+	l := (&LogStreamer{ContainerID: "test_id", ContainerName: "test_name", DockerClient: mock}).Go(t.Context())
+	select {
+	case <-l.ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("context of a stream that ended by itself should be released")
+	}
+	assert.True(t, l.Exited())
+}
+
+func TestLogStreamer_ExitReleasesContextAfterDone(t *testing.T) {
+	var exitedAtCancel bool
+	l := &LogStreamer{done: make(chan struct{})}
+	l.cancel = func() { exitedAtCancel = l.Exited() }
+	l.exit()
+	assert.True(t, exitedAtCancel, "the context is released only after the stream goroutine is marked exited")
+}

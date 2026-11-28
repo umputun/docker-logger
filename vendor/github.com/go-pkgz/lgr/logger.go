@@ -46,7 +46,8 @@ const (
 var secretReplacement = []byte("******")
 
 var (
-	reTraceDefault = regexp.MustCompile(`.*/lgr/logger\.go.*\n`)
+	// match function names because source directories vary between builds
+	reTraceDefault = regexp.MustCompile(`(?m)^.*github\.com/go-pkgz/lgr\.\(\*Logger\)\.(?:logf|Logf)\([^\n]*\n[^\n]*\n`)
 	reTraceStd     = regexp.MustCompile(`.*/log/log\.go.*\n`)
 )
 
@@ -63,7 +64,8 @@ type Logger struct {
 	levelBraces    bool         // encloses level with [], i.e. [INFO]
 	callerDepth    int          // how many stack frames to skip, relative to the real (reported) frame
 	format         string       // layout template
-	secrets        [][]byte     // sub-strings to secrets by matching
+	secrets        secretSet    // sub-strings to hide in this logger's output
+	shared         *secretSet   // package-level secrets hidden in addition to own ones, nil for loggers made by New
 	mapper         Mapper       // map (alter) output based on levels
 	slogHandler    slog.Handler // optional slog handler to delegate logging
 
@@ -95,7 +97,7 @@ type layout struct {
 }
 
 // New makes new leveled logger. By default writes to stdout/stderr.
-// default format: 2018/01/07 13:02:34.123 DEBUG some message 123
+// default format: 2018/01/07 13:02:34 INFO  some message 123
 func New(options ...Option) *Logger {
 
 	res := Logger{
@@ -140,45 +142,57 @@ func New(options ...Option) *Logger {
 
 // Logf implements L interface to output with printf style.
 // DEBUG and TRACE filtered out by dbg and trace flags.
-// ERROR and FATAL also send the same line to err writer.
-// FATAL and PANIC adds runtime stack and os.exit(1), like panic.
+// ERROR, FATAL and PANIC also send the line to err writer, except with SlogHandler, where only PANIC writes
+// its heading and dump there.
+// FATAL and PANIC call os.Exit(1), PANIC dumps all goroutine stacks to err first.
 func (l *Logger) Logf(format string, args ...interface{}) {
 	// to align call depth between (*Logger).Logf() and, for example, Printf()
-	l.logf(format, args...)
+	l.logf(0, format, args...)
 }
 
+// logf writes the message. A non-zero pc is the caller to report, as a slog record carries it,
+// otherwise the caller is found on the stack, callerDepth frames above the exported caller of logf.
 // nolint gocyclo
-func (l *Logger) logf(format string, args ...interface{}) {
+func (l *Logger) logf(pc uintptr, format string, args ...any) {
 
 	var lv, msg string
+	var found bool
 	if len(args) == 0 {
-		lv, msg = l.extractLevel(format)
+		lv, msg, found = extractLevel(format)
 	} else {
-		lv, msg = l.extractLevel(fmt.Sprintf(format, args...))
+		lv, msg, found = extractLevel(fmt.Sprintf(format, args...))
 	}
 
-	if lv == "DEBUG" && !l.dbg {
-		return
-	}
-	if lv == "TRACE" && !l.trace {
+	if l.skips(lv) {
 		return
 	}
 
 	// hide secrets in the message itself, covers slog handler and panic dump paths
-	// as well as the formatted line redacted later in this function
-	if len(l.secrets) > 0 {
-		msg = string(l.hideSecrets([]byte(msg)))
+	// as well as the formatted line redacted later in this function.
+	// reuse both snapshots so the message and the final line use the same secrets
+	own, shared := l.secrets.list(), l.shared.list()
+	if len(own)+len(shared) > 0 {
+		msg = string(own.hide([]byte(msg), shared))
+	}
+	if found { // trimmed after hiding, so a secret ending in whitespace still matches
+		msg = strings.TrimSpace(msg)
 	}
 
 	// if slog handler is set, use it
 	if l.slogHandler != nil {
-		// get the caller's PC so slog handlers can resolve source info when AddSource is enabled
-		var pcs [1]uintptr
-		runtime.Callers(3+l.callerDepth, pcs[:]) // skip runtime.Callers, logf, Logf (+ any extra depth)
-		record := slog.NewRecord(l.now(), stringToLevel(lv), msg, pcs[0])
-		_ = l.slogHandler.Handle(context.Background(), record)
+		level := stringToLevel(lv)
+		if l.slogHandler.Enabled(context.Background(), level) {
+			if pc == 0 {
+				// get the caller's PC so slog handlers can resolve source info when AddSource is enabled
+				var pcs [1]uintptr
+				runtime.Callers(3+l.callerDepth, pcs[:]) // skip runtime.Callers, logf, Logf (+ any extra depth)
+				pc = pcs[0]
+			}
+			record := slog.NewRecord(l.now(), level, msg, pc)
+			_ = l.slogHandler.Handle(context.Background(), record)
+		}
 
-		// handle FATAL and PANIC levels as they have special behavior
+		// handle FATAL and PANIC levels as they have special behavior, whether the handler took the record or not
 		if lv == "FATAL" || lv == "PANIC" {
 			if lv == "PANIC" {
 				// print panic stack trace
@@ -192,7 +206,11 @@ func (l *Logger) logf(format string, args ...interface{}) {
 
 	var ci callerInfo
 	if l.callerOn { // optimization to avoid expensive caller evaluation if caller info not in the template
-		ci = l.reportCaller(l.callerDepth)
+		if pc != 0 {
+			ci = l.callerFromPC(pc)
+		} else {
+			ci = l.reportCaller(l.callerDepth)
+		}
 	}
 
 	elems := layout{
@@ -216,13 +234,17 @@ func (l *Logger) logf(format string, args ...interface{}) {
 		}
 		data = buf.Bytes()
 	}
-	data = append(data, '\n')
 
 	if l.levelBracesOn { // rearrange space in short levels
 		data = bytes.Replace(data, []byte("[WARN ]"), []byte("[WARN] "), 1)
 		data = bytes.Replace(data, []byte("[INFO ]"), []byte("[INFO] "), 1)
 	}
-	data = l.hideSecrets(data)
+	// hidden with the line end attached, so a secret ending in a newline still matches here,
+	// and the line end is put back when a secret took it, so the next line stays separate
+	data = own.hide(append(data, '\n'), shared)
+	if data[len(data)-1] != '\n' {
+		data = append(data, '\n')
+	}
 
 	l.lock.Lock()
 	_, _ = l.stdout.Write(data)
@@ -258,11 +280,34 @@ func (l *Logger) logf(format string, args ...interface{}) {
 	l.lock.Unlock()
 }
 
-func (l *Logger) hideSecrets(data []byte) []byte {
-	for _, h := range l.secrets {
-		data = bytes.ReplaceAll(data, h, secretReplacement)
+// skips reports whether this logger drops messages at level lv, DEBUG without Debug or TRACE without Trace.
+func (l *Logger) skips(lv string) bool {
+	return (lv == "DEBUG" && !l.dbg) || (lv == "TRACE" && !l.trace)
+}
+
+// hideSecrets replaces this logger's secrets and the package-level ones it hides in s.
+// A nil logger, as a type embedding *Logger may hold, hides nothing.
+func (l *Logger) hideSecrets(s string) string {
+	if l == nil {
+		return s
 	}
-	return data
+	own, shared := l.secrets.list(), l.shared.list()
+	if len(own)+len(shared) == 0 {
+		return s
+	}
+	return string(own.hide([]byte(s), shared))
+}
+
+// AddSecrets adds values to hide in this logger's output. Safe to call while other goroutines log.
+// Empty and whitespace-only values are ignored.
+func (l *Logger) AddSecrets(vals ...string) {
+	l.secrets.add(vals...)
+}
+
+// RemoveSecrets stops hiding values in this logger's output, the ones set by Secret option too.
+// Package-level secrets are not affected.
+func (l *Logger) RemoveSecrets(vals ...string) {
+	l.secrets.remove(vals...)
 }
 
 type callerInfo struct {
@@ -300,7 +345,17 @@ func (l *Logger) reportCaller(calldepth int) (res callerInfo) {
 
 	// add 5 to adjust stack level because it was called from 3 nested functions added by lgr, i.e. caller,
 	// reportCaller and logf, plus 2 frames by runtime
-	filePath, line, funcName := caller(calldepth + 2 + 3)
+	return l.newCallerInfo(caller(calldepth + 2 + 3))
+}
+
+// callerFromPC reports the caller at the program counter pc, as slog.Record.PC holds it
+func (l *Logger) callerFromPC(pc uintptr) callerInfo {
+	frame, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	return l.newCallerInfo(frame.File, frame.Line, frame.Function)
+}
+
+// newCallerInfo makes callerInfo from the file path, line and full function name of a stack frame
+func (l *Logger) newCallerInfo(filePath string, line int, funcName string) (res callerInfo) {
 	if (filePath == "") || (line <= 0) || (funcName == "") {
 		return callerInfo{}
 	}
@@ -333,12 +388,17 @@ func (l *Logger) formatWithOptions(elems layout) (res string) {
 
 	parts := make([]string, 0, 4)
 
+	dt := orElse(l.msec,
+		func() string { return elems.DT.Format("2006/01/02 15:04:05.000") },
+		func() string { return elems.DT.Format("2006/01/02 15:04:05") },
+	)
+	if l.mapper.TimeFunc != nil {
+		dt = l.mapper.TimeFunc(dt)
+	}
+
 	parts = append(
 		parts,
-		l.mapper.TimeFunc(orElse(l.msec,
-			func() string { return elems.DT.Format("2006/01/02 15:04:05.000") },
-			func() string { return elems.DT.Format("2006/01/02 15:04:05") },
-		)),
+		dt,
 		l.levelMapper(elems.Level)(orElse(l.levelBraces,
 			func() string { return `[` + elems.Level + `]` },
 			func() string { return elems.Level },
@@ -384,17 +444,20 @@ func (l *Logger) formatLevel(lv string) string {
 	return lv + spaces
 }
 
-// extractLevel parses messages with optional level prefix and returns level and the message with stripped level
-func (l *Logger) extractLevel(line string) (level, msg string) {
+// extractLevel parses a message with an optional level prefix and returns the level and the message without it.
+// A bare level counts only when followed by whitespace (space, tab, CR or LF), a colon or the end of the line,
+// so "WARNING" is not WARN; a bracketed level may be followed by anything. A line without a recognized prefix is INFO,
+// with found false. The message is the rest of the line as it is, separator included; callers decide how to trim it.
+func extractLevel(line string) (level, msg string, found bool) {
 	for _, lv := range levels {
-		if strings.HasPrefix(line, lv) {
-			return lv, strings.TrimSpace(line[len(lv):])
+		if rest, ok := strings.CutPrefix(line, "["+lv+"]"); ok {
+			return lv, rest, true
 		}
-		if strings.HasPrefix(line, "["+lv+"]") {
-			return lv, strings.TrimSpace(line[len("["+lv+"]"):])
+		if rest, ok := strings.CutPrefix(line, lv); ok && (rest == "" || strings.IndexByte(" \t\r\n:", rest[0]) >= 0) {
+			return lv, rest, true
 		}
 	}
-	return "INFO", line
+	return "INFO", line, false
 }
 
 func (l *Logger) levelMapper(level string) mapFunc {

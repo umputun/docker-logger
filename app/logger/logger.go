@@ -52,7 +52,7 @@ func (l *LogStreamer) Go(ctx context.Context) *LogStreamer {
 	l.done = make(chan struct{})
 
 	go func() {
-		defer close(l.done)
+		defer l.exit()
 		if err := l.stream(); err != nil {
 			l.err.Store(err)
 			log.Printf("[WARN] stream from %s terminated with error %v", l.ContainerID, err)
@@ -175,4 +175,22 @@ func (l *LogStreamer) Close() {
 // or was canceled by Close or the parent context.
 func (l *LogStreamer) Wait() {
 	<-l.done
+}
+
+// exit marks the stream goroutine as exited and then releases its context, so whoever sees the
+// context canceled by a stream that ended by itself also sees Exited report true
+func (l *LogStreamer) exit() {
+	close(l.done)
+	l.cancel()
+}
+
+// Exited tells, without blocking, whether the stream goroutine has exited, as Wait would see it.
+// A stream waiting to be reopened has not exited.
+func (l *LogStreamer) Exited() bool {
+	select {
+	case <-l.done:
+		return true
+	default:
+		return false
+	}
 }
