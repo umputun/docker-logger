@@ -13,7 +13,7 @@ type Writer struct {
 
 // Write to lgr.L
 func (w *Writer) Write(p []byte) (n int, err error) {
-	w.Logf(w.level + string(p))
+	w.Logf("%s", w.level+string(p))
 	return len(p), nil
 }
 
@@ -33,7 +33,7 @@ func ToStdLogger(l L, level string) *log.Logger {
 // SetupStdLogger makes the default std logger with lgr.L
 func SetupStdLogger(opts ...Option) {
 	logOpts := append([]Option{CallerDepth(3)}, opts...) // skip 3 more frames to compensate stdlog calls
-	l := New(logOpts...)
+	l := newShared(logOpts...)
 	l.reTrace = reTraceStd // std logger split on log/ path
 	log.SetOutput(ToWriter(l, ""))
 	log.SetPrefix("")

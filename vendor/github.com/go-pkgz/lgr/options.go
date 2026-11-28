@@ -3,7 +3,6 @@ package lgr
 import (
 	"io"
 	"log/slog"
-	"strings"
 )
 
 // Option func type
@@ -41,7 +40,7 @@ func CallerDepth(n int) Option {
 	}
 }
 
-// Format sets output layout, overwrites all options for individual parts, i.e. Caller*, Msec and LevelBraces
+// Format sets output layout, overwrites all options for individual parts, i.e. Caller*, Msec, LevelBraces and Map
 func Format(f string) Option {
 	return func(l *Logger) {
 		l.format = f
@@ -77,15 +76,11 @@ func Msec(l *Logger) {
 }
 
 // Secret sets list of substring to be hidden, i.e. replaced by "******"
-// Useful to prevent passwords or other sensitive tokens to be logged.
+// Useful to prevent passwords or other sensitive tokens to be logged. Empty values are ignored.
+// Longer values are replaced first, so a secret containing another one is hidden as a whole.
 func Secret(vals ...string) Option {
 	return func(l *Logger) {
-		for _, v := range vals {
-			if strings.TrimSpace(v) == "" {
-				continue // skip empty secrets
-			}
-			l.secrets = append(l.secrets, []byte(v))
-		}
+		l.secrets.add(vals...)
 	}
 }
 
@@ -103,7 +98,8 @@ func StackTraceOnError(l *Logger) {
 
 // SlogHandler sets slog.Handler to delegate logging to. When using this option,
 // the output format will be controlled by the slog.Handler provided, not by lgr's
-// format options.
+// format options. lgr's Debug and Trace filter runs first, then the handler drops
+// the messages below its own level.
 //
 // IMPORTANT: When using lgr.SlogHandler:
 //
