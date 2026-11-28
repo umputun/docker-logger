@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ type EventNotif struct {
 	excludesRegexp *regexp.Regexp
 	eventsCh       chan Event
 	listenerErr    chan error // communicates activate() failure back to the caller
+	since          time.Time  // taken before the initial scan, the daemon replays events from it on subscription
 }
 
 // Event is simplified docker.APIEvents for containers only, exposed to caller
@@ -36,7 +38,7 @@ type Event struct {
 // DockerClient defines interface listing containers and subscribing to events
 type DockerClient interface {
 	ListContainers(opts docker.ListContainersOptions) ([]docker.APIContainers, error)
-	AddEventListener(listener chan<- *docker.APIEvents) error
+	AddEventListenerWithOptions(opts docker.EventsOptions, listener chan<- *docker.APIEvents) error
 }
 
 var reGroup = regexp.MustCompile(`/(.*?)/`)
@@ -90,7 +92,10 @@ func NewEventNotif(dockerClient DockerClient, opts EventNotifOpts) (*EventNotif,
 	}
 
 	// first get all currently running containers, the caller can't consume events until this returns
-	// so the channel has to be big enough to hold the whole initial batch
+	// so the channel has to be big enough to hold the whole initial batch. Events fired between the
+	// scan and the subscription are replayed by the daemon from since, which is taken before the scan.
+	// since comes from this host's clock, so a remote daemon whose clock is behind it replays less.
+	res.since = time.Now()
 	initial, err := res.runningContainerEvents()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to emit containers")
@@ -122,10 +127,13 @@ func (e *EventNotif) Err() <-chan error {
 
 // activate starts blocking listener for all docker events
 // filters everything except "container" type, detects stop/start events and publishes to eventsCh.
+// The daemon first replays the events since the initial scan, so some of them may repeat its entries.
 // on failure or channel close, it closes eventsCh to signal consumers.
 func (e *EventNotif) activate(client DockerClient) {
 	dockerEventsCh := make(chan *docker.APIEvents, dockerEventsChBuffer)
-	if err := client.AddEventListener(dockerEventsCh); err != nil {
+	// the daemon takes subsecond precision, "seconds.nanoseconds", so only the interval itself is replayed
+	since := fmt.Sprintf("%d.%09d", e.since.Unix(), e.since.Nanosecond())
+	if err := client.AddEventListenerWithOptions(docker.EventsOptions{Since: since}, dockerEventsCh); err != nil {
 		log.Printf("[ERROR] can't add event listener, %v", err)
 		e.listenerErr <- errors.Wrap(err, "can't add event listener")
 		close(e.eventsCh)

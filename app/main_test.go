@@ -6,6 +6,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/docker-logger/app/discovery"
+	"github.com/umputun/docker-logger/app/discovery/mocks"
 	logmocks "github.com/umputun/docker-logger/app/logger/mocks"
 	"github.com/umputun/docker-logger/app/syslog"
 )
@@ -646,4 +651,271 @@ func Test_makeLogWritersSyslogWithFiles(t *testing.T) {
 
 	assert.NoError(t, stdWr.Close())
 	assert.NoError(t, errWr.Close())
+}
+
+// fakeDaemon stands in for the docker daemon behind both discovery and the log streamers. It keeps
+// the history of container events, replays it from Since on subscription as the daemon does, and
+// follows a container's log until that container stops.
+type fakeDaemon struct {
+	mu       sync.Mutex
+	history  []*docker.APIEvents
+	runs     map[string]chan struct{} // closed when the container's current run stops, absent while stopped
+	active   map[string]int           // Logs calls following a running container
+	exited   chan string              // id of the container whose streamer has exited or been closed
+	listener chan<- *docker.APIEvents
+	lastNano int64
+}
+
+func newFakeDaemon() *fakeDaemon {
+	return &fakeDaemon{runs: map[string]chan struct{}{}, active: map[string]int{}, exited: make(chan string, 100)}
+}
+
+// record stamps each event later than the one before, as two transitions of one container never share a stamp
+func (d *fakeDaemon) record(id, status string) *docker.APIEvents {
+	d.lastNano = max(time.Now().UnixNano(), d.lastNano+1)
+	ev := &docker.APIEvents{Type: "container", Status: status, Time: d.lastNano / 1e9, TimeNano: d.lastNano}
+	ev.Actor.ID = id
+	ev.Actor.Attributes = map[string]string{"name": "name-" + id}
+	d.history = append(d.history, ev)
+	return ev
+}
+
+func (d *fakeDaemon) start(id string) *docker.APIEvents {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.runs[id] = make(chan struct{})
+	return d.record(id, "start")
+}
+
+func (d *fakeDaemon) stop(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	close(d.runs[id])
+	delete(d.runs, id)
+	d.record(id, "die")
+}
+
+// container makes a listing entry created well before any of its events
+func (d *fakeDaemon) container(id string) docker.APIContainers {
+	return docker.APIContainers{ID: id, Names: []string{"/name-" + id}, Created: time.Now().Add(-time.Hour).Unix()}
+}
+
+// replay returns the recorded events stamped at or after since, "seconds[.nanoseconds]" as the daemon
+// takes it. Without since the daemon replays nothing.
+func (d *fakeDaemon) replay(t *testing.T, since string) []*docker.APIEvents {
+	if since == "" {
+		return nil
+	}
+	secs, nsecs, _ := strings.Cut(since, ".")
+	sec, err := strconv.ParseInt(secs, 10, 64)
+	if err != nil {
+		t.Errorf("invalid since %q, %v", since, err)
+	}
+	var nsec int64
+	if nsecs != "" {
+		if nsec, err = strconv.ParseInt((nsecs + "000000000")[:9], 10, 64); err != nil {
+			t.Errorf("invalid since %q, %v", since, err)
+		}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var res []*docker.APIEvents
+	for _, ev := range d.history {
+		if ev.TimeNano >= time.Unix(sec, nsec).UnixNano() {
+			res = append(res, ev)
+		}
+	}
+	return res
+}
+
+func (d *fakeDaemon) Logs(opts docker.LogsOptions) error {
+	d.mu.Lock()
+	run, running := d.runs[opts.Container]
+	if running {
+		d.active[opts.Container]++
+	}
+	d.mu.Unlock()
+	// the streamer cancels its context only after it has exited, or when it is closed
+	go func() {
+		<-opts.Context.Done()
+		d.exited <- opts.Container
+	}()
+	if !running {
+		return nil // the daemon ends the stream of a stopped container at once
+	}
+	defer func() {
+		d.mu.Lock()
+		d.active[opts.Container]--
+		d.mu.Unlock()
+	}()
+	select {
+	case <-run:
+		return nil
+	case <-opts.Context.Done():
+		return opts.Context.Err()
+	}
+}
+
+func (d *fakeDaemon) following(id string) int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.active[id]
+}
+
+// waitExited waits for a streamer of the container to exit
+func (d *fakeDaemon) waitExited(t *testing.T, id string) {
+	for {
+		select {
+		case got := <-d.exited:
+			if got == id {
+				return
+			}
+		case <-time.After(5 * time.Second):
+			t.Errorf("log stream of %s did not end", id)
+			return
+		}
+	}
+}
+
+func Test_runEventLoopReplayedEvents(t *testing.T) {
+	// run starts discovery and the event loop on the fake daemon. scan runs inside the container listing,
+	// after since is taken, and returns the listing. subscribe runs when the event listener is added,
+	// before the daemon replays the events since, and order returns them in the order they are delivered.
+	run := func(t *testing.T, d *fakeDaemon, scan func() []docker.APIContainers, subscribe func(),
+		order func(events []*docker.APIEvents) []*docker.APIEvents) {
+		t.Helper()
+		replayed := make(chan struct{})
+		dockerClient := &mocks.DockerClientMock{
+			ListContainersFunc: func(docker.ListContainersOptions) ([]docker.APIContainers, error) {
+				return scan(), nil
+			},
+			AddEventListenerWithOptionsFunc: func(opts docker.EventsOptions, listener chan<- *docker.APIEvents) error {
+				subscribe()
+				events := order(d.replay(t, opts.Since))
+				go func() {
+					defer close(replayed)
+					for _, ev := range events {
+						listener <- ev
+					}
+					d.mu.Lock()
+					d.listener = listener
+					d.mu.Unlock()
+				}()
+				return nil
+			},
+		}
+		notif, err := discovery.NewEventNotif(dockerClient, discovery.EventNotifOpts{})
+		require.NoError(t, err)
+
+		opts := cliOpts{FilesLocation: t.TempDir(), EnableFiles: true, MaxFileSize: 1, MaxFilesCount: 10}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			_ = runEventLoop(ctx, &opts, notif.Channel(), notif.Err(), d)
+			close(done)
+		}()
+		t.Cleanup(func() {
+			cancel()
+			<-done
+			// closing the listener ends discovery, which closes its channel
+			<-replayed
+			close(d.listener)
+			for range notif.Channel() {
+			}
+		})
+	}
+
+	// live sends an event once the replay is delivered
+	live := func(t *testing.T, d *fakeDaemon, ev *docker.APIEvents) {
+		t.Helper()
+		var listener chan<- *docker.APIEvents
+		require.Eventually(t, func() bool {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			listener = d.listener
+			return listener != nil
+		}, 5*time.Second, time.Millisecond, "replay should be delivered")
+		listener <- ev
+	}
+
+	// settled checks the container is followed by exactly one stream once every event sent so far is
+	// processed, which a start of a sentinel container sent after them confirms
+	settled := func(t *testing.T, d *fakeDaemon, id string) {
+		t.Helper()
+		live(t, d, d.start("sentinel"))
+		require.Eventually(t, func() bool { return d.following("sentinel") == 1 }, 5*time.Second, time.Millisecond)
+		require.Eventually(t, func() bool { return d.following(id) == 1 }, 5*time.Second, time.Millisecond,
+			"%s should be followed by one stream, got %d", id, d.following(id))
+		require.Never(t, func() bool { return d.following(id) != 1 }, 100*time.Millisecond, time.Millisecond)
+	}
+
+	inOrder := func(events []*docker.APIEvents) []*docker.APIEvents { return events }
+	reversed := func(events []*docker.APIEvents) []*docker.APIEvents {
+		res := slices.Clone(events)
+		slices.Reverse(res)
+		return res
+	}
+
+	t.Run("missed start", func(t *testing.T) {
+		d := newFakeDaemon()
+		run(t, d, func() []docker.APIContainers {
+			d.start("c1") // after the listing is composed, so it is not in it
+			return nil
+		}, func() {}, inOrder)
+		settled(t, d, "c1")
+	})
+
+	t.Run("missed stop with the same id returning", func(t *testing.T) {
+		d := newFakeDaemon()
+		d.start("c1")
+		run(t, d, func() []docker.APIContainers {
+			c1 := d.container("c1")
+			d.stop("c1") // after the listing is composed, so it still lists the container
+			return []docker.APIContainers{c1}
+		}, func() {}, inOrder)
+		d.waitExited(t, "c1")
+		live(t, d, d.start("c1"))
+		settled(t, d, "c1")
+	})
+
+	// the listing still has the container stopped after it was composed, so the streamer made for
+	// that entry exits at once. The container starts again before the replay is delivered.
+	for _, tc := range []struct {
+		name  string
+		order func([]*docker.APIEvents) []*docker.APIEvents
+	}{{"stop then start on a stale entry", inOrder}, {"start then stop on a stale entry", reversed}} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newFakeDaemon()
+			d.start("c1")
+			run(t, d, func() []docker.APIContainers {
+				c1 := d.container("c1")
+				d.stop("c1")
+				return []docker.APIContainers{c1}
+			}, func() {
+				d.waitExited(t, "c1")
+				d.start("c1")
+			}, tc.order)
+			settled(t, d, "c1")
+		})
+	}
+
+	// the container stops and starts again before the listing is composed, so the streamer made for
+	// its entry follows the new run
+	for _, tc := range []struct {
+		name  string
+		order func([]*docker.APIEvents) []*docker.APIEvents
+	}{{"stop then start on a live entry", inOrder}, {"start then stop on a live entry", reversed}} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newFakeDaemon()
+			d.start("c1")
+			run(t, d, func() []docker.APIContainers {
+				d.stop("c1")
+				d.start("c1")
+				return []docker.APIContainers{d.container("c1")}
+			}, func() {
+				assert.Eventually(t, func() bool { return d.following("c1") == 1 }, 5*time.Second, time.Millisecond)
+			}, tc.order)
+			settled(t, d, "c1")
+		})
+	}
 }
